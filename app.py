@@ -38,7 +38,9 @@ for order in orders:
         st.write("Skipping order due to date parsing error:", order)
 
 st.write("🔎 Filter range:", start_date, "to", end_date)
-st.write("🔎 Filtered payment dates:", [o.get("paymentDate") for o in filtered_orders])
+
+with st.expander("🔍 View Filtered Payment Dates", expanded=False):
+    st.write([o.get("paymentDate") for o in filtered_orders])
 
 if not filtered_orders:
     st.warning("No orders found in the selected date range.")
