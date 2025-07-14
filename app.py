@@ -20,19 +20,6 @@ end_date = st.sidebar.date_input("End Date", default_end)
 
 # Title
 st.title("📦 Fulfillment & Production Dashboard")
-with st.expander("📦 Add Received Inventory", expanded=False):
-    with st.form("add_inventory_form"):
-        sku_input = st.text_input("Enter SKU").strip().upper()
-        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
-        submitted = st.form_submit_button("Add to Inventory")
-
-        if submitted:
-            from sheet_loader import update_inventory_quantity
-            success = update_inventory_quantity(sku_input, qty_input)
-            if success:
-                st.success(f"✅ {qty_input} units added to {sku_input}.")
-            else:
-                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
 # Load & filter orders
 orders = get_orders()
@@ -70,41 +57,44 @@ def explode_orders(orders, kits):
         for item in items:
             sku = (item.get('sku') or '').strip().upper()
             qty = item.get('quantity', 0)
-            item_name = (item.get('name') or 'Unknown').strip()
 
             if sku in kits:
                 for comp in kits[sku]:
-                    key = (comp["sku"], comp["name"])
+                    key = comp["sku"].strip().upper()
                     exploded[key]["total"] += qty * comp["qty"]
                     exploded[key]["from_kits"] += qty * comp["qty"]
 
-                # Also include the kit SKU itself if stocked
                 if sku in inventory_levels:
-                    key = (sku, item_name)
-                    exploded[key]["total"] += qty
-                    exploded[key]["standalone"] += qty
+                    exploded[sku]["total"] += qty
+                    exploded[sku]["standalone"] += qty
             else:
-                key = (sku, item_name)
-                exploded[key]["total"] += qty
-                exploded[key]["standalone"] += qty
+                exploded[sku]["total"] += qty
+                exploded[sku]["standalone"] += qty
     return exploded
 
 # Explode data
 sku_totals = explode_orders(filtered_orders, kits)
 
 # Build dataframe
-df = pd.DataFrame([
-    {
-        "SKU": k[0],
-        "Product Name": k[1],
+data = []
+for sku, v in sku_totals.items():
+    product_name = ""
+    if sku in inventory_levels:
+        # Try to extract the product name from inventory sheet by SKU
+        for s, stock in inventory_levels.items():
+            if s == sku:
+                product_name = s  # fallback: use SKU as name
+    data.append({
+        "SKU": sku,
+        "Product Name": product_name,
         "Total Quantity Needed": v["total"],
         "From Kits": v["from_kits"],
         "Standalone Orders": v["standalone"],
-        "Stock On Hand": inventory_levels.get(k[0], 0),
-        "Is Kit": "✅" if k[0] in kits and k[0] in inventory_levels else ""
-    }
-    for k, v in sku_totals.items()
-])
+        "Stock On Hand": inventory_levels.get(sku, 0),
+        "Is Kit": "✅" if sku in kits and sku in inventory_levels else ""
+    })
+
+df = pd.DataFrame(data)
 
 if df.empty:
     st.warning("No data to display. Check your kits or order contents.")
@@ -117,9 +107,11 @@ inventory_skus = set(inventory_levels.keys())
 valid_skus = kit_component_skus.union(kit_skus).union(inventory_skus)
 df = df[df["SKU"].notna() & df["SKU"].str.upper().isin({sku.upper() for sku in valid_skus})]
 
-# Calculate shortage
+# Calculate shortage and running inventory
 df["Qty Short"] = df["Total Quantity Needed"] - df["Stock On Hand"]
 df["Qty Short"] = df["Qty Short"].apply(lambda x: max(x, 0))
+df["Running Inventory"] = df["Stock On Hand"] - df["Total Quantity Needed"]
+df["Running Inventory"] = df["Running Inventory"].apply(lambda x: max(x, 0))
 
 # Sort and display
 df = df.sort_values(by="Total Quantity Needed", ascending=False).reset_index(drop=True)
