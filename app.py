@@ -20,6 +20,19 @@ end_date = st.sidebar.date_input("End Date", default_end)
 
 # Title
 st.title("📦 Fulfillment & Production Dashboard")
+with st.expander("📦 Add Received Inventory", expanded=False):
+    with st.form("add_inventory_form"):
+        sku_input = st.text_input("Enter SKU").strip().upper()
+        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
+        submitted = st.form_submit_button("Add to Inventory")
+
+        if submitted:
+            from sheet_loader import update_inventory_quantity
+            success = update_inventory_quantity(sku_input, qty_input)
+            if success:
+                st.success(f"✅ {qty_input} units added to {sku_input}.")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
 # Load & filter orders
 orders = get_orders()
