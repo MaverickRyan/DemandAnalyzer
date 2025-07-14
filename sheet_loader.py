@@ -45,3 +45,17 @@ def load_inventory_from_sheets():
         inventory[sku] = {"stock": stock, "name": name}
 
     return inventory
+
+def update_inventory_quantity(sku, qty_to_add):
+    client = get_gspread_client()
+    sheet = client.open("Kit BOMs").worksheet("inventory")
+    data = sheet.get_all_records()
+
+    for idx, row in enumerate(data, start=2):  # row 2 = first data row (skip header)
+        row_sku = row.get("SKU", "").strip().upper()
+        if row_sku == sku.strip().upper():
+            current_qty = int(row.get("Stock On Hand", 0))
+            new_qty = current_qty + qty_to_add
+            sheet.update_cell(idx, 2, new_qty)  # column 2 = 'Stock On Hand'
+            return True
+    return False  # SKU not found
