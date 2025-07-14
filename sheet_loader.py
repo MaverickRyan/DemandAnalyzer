@@ -2,13 +2,18 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from collections import defaultdict
+import streamlit as st
+
+# Create credentials from secrets dictionary
+def get_gspread_client():
+    gspread_key_dict = dict(st.secrets["gspread_key"])
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(gspread_key_dict, scope)
+    return gspread.authorize(creds)
 
 # Load Kits from Google Sheets
 def load_kits_from_sheets():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_key.json", scope)
-    client = gspread.authorize(creds)
-
+    client = get_gspread_client()
     sheet = client.open("Kit BOMs").worksheet("kits")
     rows = sheet.get_all_records()
 
@@ -28,10 +33,7 @@ def load_kits_from_sheets():
 
 # Load Inventory from Google Sheets
 def load_inventory_from_sheets():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_key.json", scope)
-    client = gspread.authorize(creds)
-
+    client = get_gspread_client()
     sheet = client.open("Kit BOMs").worksheet("inventory")
     rows = sheet.get_all_records()
 
