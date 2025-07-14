@@ -79,11 +79,10 @@ sku_totals = explode_orders(filtered_orders, kits)
 data = []
 for sku, v in sku_totals.items():
     product_name = ""
-    if sku in inventory_levels:
-        # Try to extract the product name from inventory sheet by SKU
-        for s, stock in inventory_levels.items():
-            if s == sku:
-                product_name = s  # fallback: use SKU as name
+    for inv_sku in inventory_levels:
+        if inv_sku.upper() == sku:
+            product_name = inv_sku  # fallback to SKU if not found in a name map
+            break
     data.append({
         "SKU": sku,
         "Product Name": product_name,
