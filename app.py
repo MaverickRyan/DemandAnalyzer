@@ -78,18 +78,17 @@ sku_totals = explode_orders(filtered_orders, kits)
 # Build dataframe
 data = []
 for sku, v in sku_totals.items():
-    product_name = ""
-    for inv_sku in inventory_levels:
-        if inv_sku.upper() == sku:
-            product_name = inv_sku  # fallback to SKU if not found in a name map
-            break
+    stock_info = inventory_levels.get(sku, {})
+    product_name = stock_info.get("name", sku)
+    stock_qty = stock_info.get("stock", 0)
+
     data.append({
         "SKU": sku,
         "Product Name": product_name,
         "Total Quantity Needed": v["total"],
         "From Kits": v["from_kits"],
         "Standalone Orders": v["standalone"],
-        "Stock On Hand": inventory_levels.get(sku, 0),
+        "Stock On Hand": stock_qty,
         "Is Kit": "✅" if sku in kits and sku in inventory_levels else ""
     })
 
