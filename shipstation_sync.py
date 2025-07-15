@@ -32,7 +32,7 @@ if not API_KEY or not API_SECRET:
 
 DB_PATH = "order_log.db"
 
-# ✅ Only consider orders shipped in the last 7 days
+# [OK] Only consider orders shipped in the last 7 days
 SHIP_CUTOFF_DAYS = 7
 ship_date_cutoff = date.today() - timedelta(days=SHIP_CUTOFF_DAYS)
 
@@ -93,8 +93,8 @@ def get_shipped_orders():
         }
         try:
             response = requests.get(url, headers=headers, params=params, timeout=15)
-            print(f"🔁 API status: {response.status_code}")
-            print(f"🧾 API response preview: {response.text[:300]}")
+            print(f"[HTTP] API status: {response.status_code}")
+            print(f"[RESP] API response preview: {response.text[:300]}")
             response.raise_for_status()
             print("✅ ShipStation API request succeeded")
             data = response.json()
@@ -106,7 +106,7 @@ def get_shipped_orders():
             print(f"❌ Request error: {e}")
             break
 
-    print(f"📦 Total shipped orders received: {len(all_orders)}")
+    print(f"[ORDERS] Total shipped orders received: {len(all_orders)}")
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
@@ -119,58 +119,34 @@ def subtract_from_google_sheet(sku, qty):
             current_stock = int(row.get("Stock On Hand", 0))
             new_stock = max(current_stock - qty, 0)
             sheet.update_cell(idx, 3, new_stock)
-            logging.info(f"📉 Updated {sku}: {current_stock} → {new_stock}")
+            logging.info(f"[STOCK] Updated {sku}: {current_stock} → {new_stock}")
             return
-    logging.warning(f"⚠️ SKU {sku} not found in inventory sheet")
+    logging.warning(f"[WARN] SKU {sku} not found in inventory sheet")
 
-# 🚀 MAIN EXECUTION
+# [START] MAIN EXECUTION
 if __name__ == "__main__":
-    logging.info("🚀 ShipStation sync started")
-    conn = init_db()
+    print("🚀 Entered main function")
 
     try:
-        orders = get_shipped_orders()
-        logging.info(f"📦 Orders fetched: {len(orders)}")
+        load_dotenv()
+        print("✅ dotenv loaded")
+        print("🔐 API Key prefix:", API_KEY[:4])
     except Exception as e:
-        logging.error(f"❌ Error fetching orders: {e}")
-        conn.close()
-        raise
+        print("❌ dotenv error:", e)
 
-    for order in orders:
-        order_id = str(order.get("orderId"))
+    try:
+        print("[GSPREAD] Testing Google Sheets client...")
+        get_gspread_client()
+        print("✅ Google Sheets connection successful")
+    except Exception as e:
+        print("❌ Google Sheets connection error:", e)
 
-        # Filter by shipped date
-        ship_date_raw = order.get("shipDate") or order.get("modifyDate")
-        if not ship_date_raw:
-            logging.warning(f"⚠️ Order {order_id} has no ship date")
-            continue
+    try:
+        print("🌐 Fetching orders from ShipStation...")
+        orders = get_shipped_orders()
+        print(f"📦 Orders fetched: {len(orders)}")
+        print("[SAMPLE] Sample order:", orders[0] if orders else "(none)")
+    except Exception as e:
+        print("❌ Error fetching orders:", e)
 
-        try:
-            ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
-            if ship_date < ship_date_cutoff:
-                logging.info(f"⏩ Skipping old order {order_id} shipped on {ship_date}")
-                continue
-        except Exception as e:
-            logging.warning(f"⚠️ Could not parse ship date for order {order_id}: {e}")
-            continue
-
-        if is_order_processed(conn, order_id):
-            logging.info(f"🧾 Skipping already-logged order {order_id}")
-            continue
-
-        logging.info(f"✅ Processing order {order_id} from {ship_date}")
-        items = order.get("items", [])
-        sku_dict = {}
-        for item in items:
-            sku = (item.get("sku") or "").strip().upper()
-            qty = item.get("quantity", 0)
-            sku_dict[sku] = sku_dict.get(sku, 0) + qty
-
-        for sku, qty in sku_dict.items():
-            subtract_from_google_sheet(sku, qty)
-
-        log_processed_order(conn, order_id, sku_dict)
-
-    conn.close()
-    logging.info("✅ ShipStation sync completed")
-
+    print("✅ Debug mode complete")
