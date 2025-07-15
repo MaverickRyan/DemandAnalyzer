@@ -83,7 +83,7 @@ def get_shipped_orders():
     page = 1
     total_pages = 1
 
-    while page <= total_pages:
+    while page == 1:  # DEBUG: limit to 1 page
         params = {
             'pageSize': 500,
             'page': page,
@@ -92,16 +92,21 @@ def get_shipped_orders():
             'orderStatus': 'shipped'
         }
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            print(f"🔁 API status: {response.status_code}")
+            print(f"🧾 API response preview: {response.text[:300]}")
             response.raise_for_status()
+            print("✅ ShipStation API request succeeded")
             data = response.json()
             all_orders.extend(data.get('orders', []))
             total_pages = data.get('pages', 1)
             page += 1
         except requests.RequestException as e:
             logging.error(f"Error fetching orders: {e}")
+            print(f"❌ Request error: {e}")
             break
 
+    print(f"📦 Total shipped orders received: {len(all_orders)}")
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
@@ -120,37 +125,28 @@ def subtract_from_google_sheet(sku, qty):
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
-    conn = init_db()
-    orders = get_shipped_orders()
-    for order in orders:
-        order_id = str(order.get("orderId"))
+    print("🚀 Entered main function")
 
-        # 🛑 Skip orders shipped too long ago
-        ship_date_raw = order.get("shipDate")
-        if not ship_date_raw:
-            continue
-        try:
-            ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
-            if ship_date < ship_date_cutoff:
-                logging.info(f"⏩ Skipping old order {order_id} shipped on {ship_date}")
-                continue
-        except Exception as e:
-            logging.warning(f"⚠️ Could not parse shipDate for order {order_id}: {e}")
-            continue
+    try:
+        load_dotenv()
+        print("✅ dotenv loaded")
+        print("🔐 API Key prefix:", API_KEY[:4])
+    except Exception as e:
+        print("❌ dotenv error:", e)
 
-        if is_order_processed(conn, order_id):
-            continue
+    try:
+        print("📄 Testing Google Sheets client...")
+        get_gspread_client()
+        print("✅ Google Sheets connection successful")
+    except Exception as e:
+        print("❌ Google Sheets connection error:", e)
 
-        items = order.get("items", [])
-        sku_dict = {}
-        for item in items:
-            sku = (item.get("sku") or "").strip().upper()
-            qty = item.get("quantity", 0)
-            sku_dict[sku] = sku_dict.get(sku, 0) + qty
+    try:
+        print("🌐 Fetching orders from ShipStation...")
+        orders = get_shipped_orders()
+        print(f"📦 Orders fetched: {len(orders)}")
+        print("🧪 Sample order:", orders[0] if orders else "(none)")
+    except Exception as e:
+        print("❌ Error fetching orders:", e)
 
-        for sku, qty in sku_dict.items():
-            subtract_from_google_sheet(sku, qty)
-
-        log_processed_order(conn, order_id, sku_dict)
-
-    conn.close()
+    print("✅ Debug mode complete")
