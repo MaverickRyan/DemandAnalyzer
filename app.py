@@ -33,14 +33,6 @@ if st.sidebar.button("🔄 Refresh Inventory Now"):
 
 inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
-
-# Sidebar filter
-st.sidebar.header("🗓️ Filter Orders by Date")
-default_start = datetime.now().date() - timedelta(days=14)
-default_end = datetime.now().date()
-start_date = st.sidebar.date_input("Start Date", default_start)
-end_date = st.sidebar.date_input("End Date", default_end)
-
 # Title and Add Inventory Form
 st.title("📦 Fulfillment & Production Dashboard")
 with st.expander("➕ Add Received Inventory to Stock", expanded=False):
