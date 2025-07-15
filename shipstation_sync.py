@@ -1,4 +1,4 @@
-# shipstation_sync.py (fully local .env & json-based)
+# shipstation_sync.py (with local secrets, json, and full logging)
 import requests
 import base64
 import sqlite3
@@ -6,20 +6,33 @@ from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
-
 from dotenv import load_dotenv
 import os
+import logging
 
+# 🔧 Logging config
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+
+file_handler = logging.FileHandler("shipstation_sync.log")
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# 🔐 Load secrets
 load_dotenv()
 API_KEY = os.getenv("SHIPSTATION_API_KEY")
 API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
-
 if not API_KEY or not API_SECRET:
     raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
 
-# Gspread client from gspread_key.json
+# 🔐 Google Sheets client from gspread_key.json
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.load(open("gspread_key.json")), scope)
@@ -52,6 +65,7 @@ def log_processed_order(conn, order_id, sku_dict):
         sku_summary
     ))
     conn.commit()
+    logging.info(f"✅ Logged order {order_id} → {sku_summary}")
 
 def get_shipped_orders():
     url = 'https://ssapi.shipstation.com/orders'
@@ -95,25 +109,12 @@ def subtract_from_google_sheet(sku, qty):
         if row_sku == sku:
             current_stock = int(row.get("Stock On Hand", 0))
             new_stock = max(current_stock - qty, 0)
-            sheet.update_cell(idx, 3, new_stock)  # Column C = Stock On Hand
-            logging.info(f"Updated {sku}: {current_stock} → {new_stock}")
+            sheet.update_cell(idx, 3, new_stock)
+            logging.info(f"📉 Updated {sku}: {current_stock} → {new_stock}")
             return
-    logging.warning(f"SKU {sku} not found in inventory sheet")
+    logging.warning(f"⚠️ SKU {sku} not found in inventory sheet")
 
-import logging
-
-# Logging setup
-logging.basicConfig(
-    filename="shipstation_sync.log",
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    handlers=[
-        logging.FileHandler("shipstation_sync.log"),
-        logging.StreamHandler()
-    ]
-)
-
-# MAIN EXECUTION
+# 🚀 MAIN EXECUTION
 if __name__ == "__main__":
     conn = init_db()
     orders = get_shipped_orders()
@@ -133,6 +134,5 @@ if __name__ == "__main__":
             subtract_from_google_sheet(sku, qty)
 
         log_processed_order(conn, order_id, sku_dict)
-        logging.info(f"Logged order {order_id} → {sku_dict}")
 
     conn.close()
