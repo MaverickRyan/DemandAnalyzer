@@ -99,13 +99,13 @@ for sku, v in sku_totals.items():
     stock_qty = stock_info.get("stock", 0)
 
     data.append({
+        "Is Kit": "✅" if sku in kits and sku in inventory_levels else ""
         "SKU": sku,
         "Product Name": product_name,
         "Total Quantity Needed": v["total"],
         "From Kits": v["from_kits"],
         "Standalone Orders": v["standalone"],
         "Stock On Hand": stock_qty,
-        "Is Kit": "✅" if sku in kits and sku in inventory_levels else ""
     })
 
 df = pd.DataFrame(data)
