@@ -3,16 +3,13 @@ import requests
 import base64
 import sqlite3
 from datetime import datetime
-from dotenv import load_dotenv
-import os
+import streamlit as st
 
-load_dotenv()
-
-API_KEY = os.getenv("SHIPSTATION_API_KEY")
-API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
+API_KEY = st.secrets["SHIPSTATION_API_KEY"]
+API_SECRET = st.secrets["SHIPSTATION_API_SECRET"]
 
 if not API_KEY or not API_SECRET:
-    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
+    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in Streamlit secrets")
 
 DB_PATH = "order_log.db"
 
@@ -86,20 +83,9 @@ def get_shipped_orders():
 # Subtract from your Google Sheet
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import streamlit as st
 
-GSPREAD_KEY = {
-    "type": st.secrets["gspread_key"]["type"],
-    "project_id": st.secrets["gspread_key"]["project_id"],
-    "private_key_id": st.secrets["gspread_key"]["private_key_id"],
-    "private_key": st.secrets["gspread_key"]["private_key"],
-    "client_email": st.secrets["gspread_key"]["client_email"],
-    "client_id": st.secrets["gspread_key"]["client_id"],
-    "auth_uri": st.secrets["gspread_key"]["auth_uri"],
-    "token_uri": st.secrets["gspread_key"]["token_uri"],
-    "auth_provider_x509_cert_url": st.secrets["gspread_key"]["auth_provider_x509_cert_url"],
-    "client_x509_cert_url": st.secrets["gspread_key"]["client_x509_cert_url"],
-    "universe_domain": st.secrets["gspread_key"]["universe_domain"]
-}
+GSPREAD_KEY = dict(st.secrets["gspread_key"])
 
 def subtract_from_google_sheet(sku, qty):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
