@@ -51,11 +51,12 @@ def update_inventory_quantity(sku, qty_to_add):
     sheet = client.open("Kit BOMs").worksheet("inventory")
     data = sheet.get_all_records()
 
-    for idx, row in enumerate(data, start=2):  # row 2 = first data row (skip header)
+    for idx, row in enumerate(data, start=2):  # row 2 = first data row
         row_sku = row.get("SKU", "").strip().upper()
         if row_sku == sku.strip().upper():
             current_qty = int(row.get("Stock On Hand", 0))
             new_qty = current_qty + qty_to_add
-            sheet.update_cell(idx, 2, new_qty)  # column 2 = 'Stock On Hand'
-            return True
-    return False  # SKU not found
+            sheet.update_cell(idx, 3, new_qty)  # ✅ column 3 = 'Stock On Hand'
+            return {"success": True, "old_qty": current_qty, "new_qty": new_qty}
+    return {"success": False}
+
