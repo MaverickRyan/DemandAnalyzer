@@ -31,11 +31,30 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
         qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
         submitted = st.form_submit_button("Submit")
         if submitted:
-            result = update_inventory_quantity(sku_input, qty_input)
-            if result["success"]:
-                st.success(f"✅ {qty_input} units added to {sku_input}. Stock updated from {result['old_qty']} → {result['new_qty']}.")
-            else:
-                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+            kits = load_kits_from_sheets()
+            inventory = load_inventory_from_sheets()
+
+            if sku_input in kits and sku_input in inventory:
+                # Prepacked kit: subtract components to simulate assembly
+                st.info(f"[KIT] Prepacked kit detected. Subtracting components from inventory.")
+                component_success = True
+                for comp in kits[sku_input]:
+                    comp_sku = comp["sku"].strip().upper()
+                    comp_qty = qty_input * comp["qty"]
+                    comp_result = update_inventory_quantity(comp_sku, -comp_qty)
+                    if not comp_result["success"]:
+                        component_success = False
+                        st.error(f"❌ Component SKU '{comp_sku}' not found. Inventory not updated for that item.")
+                    if component_success:
+                        st.success(f"[OK] {qty_input} units of prepacked kit '{sku_input}' assembled. Components decremented.")
+                else:
+                    # Regular SKU: update stock directly
+                    result = update_inventory_quantity(sku_input, qty_input)
+                    if result["success"]:
+                        st.success(f"✅ {qty_input} units added to {sku_input}. Stock updated from {result['old_qty']} → {result['new_qty']}.")
+                    else:
+                        st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
 
 # Pull orders
 orders = get_orders()
