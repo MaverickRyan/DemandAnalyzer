@@ -13,8 +13,15 @@ from sheet_loader import (
     update_inventory_quantity
 )
 
+from streamlit_autorefresh import st_autorefresh
+# 🔄 Auto-refresh every 5 minutes
+st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
+
 kits = load_kits_from_sheets()
-inventory_levels = load_inventory_from_sheets()
+if st.sidebar.button("🔄 Refresh Inventory Now"):
+    st.session_state["inventory"] = load_inventory_from_sheets()
+
+inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
 # Sidebar filter
 st.sidebar.header("🗓️ Filter Orders by Date")
