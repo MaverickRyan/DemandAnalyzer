@@ -1,20 +1,26 @@
-# shipstation_sync.py
+# shipstation_sync.py (fully local .env & json-based)
 import requests
 import base64
 import sqlite3
 from datetime import datetime
-from dotenv import load_dotenv
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-load_dotenv()
-API_KEY = os.getenv("SHIPSTATION_API_KEY")
-API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
+import streamlit as st
+
+API_KEY = st.secrets["SHIPSTATION_API_KEY"]
+API_SECRET = st.secrets["SHIPSTATION_API_SECRET"]
 
 if not API_KEY or not API_SECRET:
-    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
+    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in Streamlit secrets")
 
 DB_PATH = "order_log.db"
 
+# Gspread client from gspread_key.json
+def get_gspread_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gspread_key"]), scope)
+    return gspread.authorize(creds)
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -29,12 +35,10 @@ def init_db():
     conn.commit()
     return conn
 
-
 def is_order_processed(conn, order_id):
     c = conn.cursor()
     c.execute("SELECT 1 FROM processed_orders WHERE order_id = ?", (order_id,))
     return c.fetchone() is not None
-
 
 def log_processed_order(conn, order_id, sku_dict):
     c = conn.cursor()
@@ -45,7 +49,6 @@ def log_processed_order(conn, order_id, sku_dict):
         sku_summary
     ))
     conn.commit()
-
 
 def get_shipped_orders():
     url = 'https://ssapi.shipstation.com/orders'
@@ -67,7 +70,6 @@ def get_shipped_orders():
             'sortDir': 'DESC',
             'orderStatus': 'shipped'
         }
-
         try:
             response = requests.get(url, headers=headers, params=params)
             response.raise_for_status()
@@ -81,22 +83,11 @@ def get_shipped_orders():
 
     return all_orders
 
-
-# Subtract from your Google Sheet
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import streamlit as st
-
-GSPREAD_KEY = dict(st.secrets["gspread_key"])
-
 def subtract_from_google_sheet(sku, qty):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GSPREAD_KEY, scope)
-    client = gspread.authorize(creds)
+    client = get_gspread_client()
     sheet = client.open("Kit BOMs").worksheet("inventory")
     data = sheet.get_all_records()
-
-    for idx, row in enumerate(data, start=2):  # Skip header row
+    for idx, row in enumerate(data, start=2):
         row_sku = row["SKU"].strip().upper()
         if row_sku == sku:
             current_stock = int(row.get("Stock On Hand", 0))
@@ -104,14 +95,12 @@ def subtract_from_google_sheet(sku, qty):
             sheet.update_cell(idx, 3, new_stock)  # Column C = Stock On Hand
             print(f"📉 Updated {sku}: {current_stock} → {new_stock}")
             return
-
     print(f"⚠️ SKU {sku} not found in inventory sheet")
 
 # MAIN EXECUTION
 if __name__ == "__main__":
     conn = init_db()
     orders = get_shipped_orders()
-
     for order in orders:
         order_id = str(order.get("orderId"))
         if is_order_processed(conn, order_id):
@@ -125,7 +114,7 @@ if __name__ == "__main__":
             sku_dict[sku] = sku_dict.get(sku, 0) + qty
 
         for sku, qty in sku_dict.items():
-            subtract_from_google_sheet(sku, qty)  # ❗ Replace with your actual updater
+            subtract_from_google_sheet(sku, qty)
 
         log_processed_order(conn, order_id, sku_dict)
         print(f"✅ Logged order {order_id} → {sku_dict}")
