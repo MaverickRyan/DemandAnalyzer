@@ -101,10 +101,11 @@ def get_shipped_orders():
         except requests.RequestException as e:
             logging.error(f"Error fetching orders: {e}")
             break
-
+    logging.info(f"🔍 Retrieved {len(all_orders)} shipped orders from ShipStation")
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
+    print(f"🔧 Attempting to subtract {qty} from {sku}")
     client = get_gspread_client()
     sheet = client.open("Kit BOMs").worksheet("inventory")
     data = sheet.get_all_records()
@@ -134,6 +135,7 @@ if __name__ == "__main__":
             ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
             if ship_date < ship_date_cutoff:
                 logging.info(f"⏩ Skipping old order {order_id} shipped on {ship_date}")
+                logging.info(f"✅ Processing order {order_id} from {ship_date}")
                 continue
         except Exception as e:
             logging.warning(f"⚠️ Could not parse shipDate for order {order_id}: {e}")
@@ -141,7 +143,9 @@ if __name__ == "__main__":
 
         if is_order_processed(conn, order_id):
             continue
-
+        
+        logging.info(f"🧾 Skipping already-logged order {order_id}")
+        
         items = order.get("items", [])
         sku_dict = {}
         for item in items:
