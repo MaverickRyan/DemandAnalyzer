@@ -29,11 +29,12 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
         submitted = st.form_submit_button("Submit")
 
         if submitted:
-            success = update_inventory_quantity(sku_input, qty_input)
-            if success:
-                st.success(f"✅ {qty_input} units added to {sku_input}.")
+            result = update_inventory_quantity(sku_input, qty_input)
+            if result["success"]:
+                st.success(f"✅ {qty_input} units added to {sku_input}. Stock updated from {result['old_qty']} → {result['new_qty']}.")
             else:
                 st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
 
 
 # Load & filter orders
