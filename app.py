@@ -18,10 +18,21 @@ from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
 kits = load_kits_from_sheets()
+
+# Sidebar filter
+st.sidebar.header("🗓️ Filter Orders by Date")
+default_start = datetime.now().date() - timedelta(days=14)
+default_end = datetime.now().date()
+start_date = st.sidebar.date_input("Start Date", default_start)
+end_date = st.sidebar.date_input("End Date", default_end)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
 inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
+
 
 # Sidebar filter
 st.sidebar.header("🗓️ Filter Orders by Date")
