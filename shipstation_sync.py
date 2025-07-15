@@ -81,7 +81,7 @@ def get_shipped_orders():
             total_pages = data.get('pages', 1)
             page += 1
         except requests.RequestException as e:
-            print("Error fetching orders:", e)
+            logging.error(f"Error fetching orders: {e}")
             break
 
     return all_orders
@@ -96,9 +96,22 @@ def subtract_from_google_sheet(sku, qty):
             current_stock = int(row.get("Stock On Hand", 0))
             new_stock = max(current_stock - qty, 0)
             sheet.update_cell(idx, 3, new_stock)  # Column C = Stock On Hand
-            print(f"📉 Updated {sku}: {current_stock} → {new_stock}")
+            logging.info(f"Updated {sku}: {current_stock} → {new_stock}")
             return
-    print(f"⚠️ SKU {sku} not found in inventory sheet")
+    logging.warning(f"SKU {sku} not found in inventory sheet")
+
+import logging
+
+# Logging setup
+logging.basicConfig(
+    filename="shipstation_sync.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.FileHandler("shipstation_sync.log"),
+        logging.StreamHandler()
+    ]
+)
 
 # MAIN EXECUTION
 if __name__ == "__main__":
@@ -120,6 +133,6 @@ if __name__ == "__main__":
             subtract_from_google_sheet(sku, qty)
 
         log_processed_order(conn, order_id, sku_dict)
-        print(f"✅ Logged order {order_id} → {sku_dict}")
+        logging.info(f"Logged order {order_id} → {sku_dict}")
 
     conn.close()
