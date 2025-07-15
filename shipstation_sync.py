@@ -5,21 +5,24 @@ import sqlite3
 from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json
 
-import streamlit as st
+from dotenv import load_dotenv
+import os
 
-API_KEY = st.secrets["SHIPSTATION_API_KEY"]
-API_SECRET = st.secrets["SHIPSTATION_API_SECRET"]
+load_dotenv()
+API_KEY = os.getenv("SHIPSTATION_API_KEY")
+API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
 
 if not API_KEY or not API_SECRET:
-    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in Streamlit secrets")
+    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
 
 # Gspread client from gspread_key.json
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gspread_key"]), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.load(open("gspread_key.json")), scope)
     return gspread.authorize(creds)
 
 def init_db():
