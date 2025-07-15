@@ -17,7 +17,8 @@ formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
 file_handler = logging.FileHandler("shipstation_sync.log")
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
-console_handler = logging.StreamHandler()
+import sys
+console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
