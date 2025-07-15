@@ -120,6 +120,7 @@ def subtract_from_google_sheet(sku, qty):
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
+    print("🚀 Script started")
     conn = init_db()
     orders = get_shipped_orders()
     for order in orders:
