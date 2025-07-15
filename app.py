@@ -35,6 +35,7 @@ inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets(
 
 # Title and Add Inventory Form
 st.title("📦 Fulfillment & Production Dashboard")
+st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
 with st.expander("➕ Add Received Inventory to Stock", expanded=False):
     with st.form("inventory_update_form"):
         sku_input = st.text_input("Enter SKU").strip().upper()
