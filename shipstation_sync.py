@@ -69,6 +69,7 @@ def log_processed_order(conn, order_id, sku_dict):
     ))
     conn.commit()
     logging.info(f"✅ Logged order {order_id} → {sku_summary}")
+    print("✅ Console print test")
 
 def get_shipped_orders():
     url = 'https://ssapi.shipstation.com/orders'
