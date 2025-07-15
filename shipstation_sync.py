@@ -10,16 +10,18 @@ from dotenv import load_dotenv
 import os
 import logging
 
-# 🔧 Logging setup
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-file_handler = logging.FileHandler("shipstation_sync.log")
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s',
+    handlers=[
+        logging.FileHandler("shipstation_sync.log"),
+        logging.StreamHandler(sys.stdout)
+    ],
+    force=True
+)
 
 # 🔐 Load secrets from .env
 load_dotenv()
