@@ -17,8 +17,7 @@ formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
 file_handler = logging.FileHandler("shipstation_sync.log")
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
-import sys
-console_handler = logging.StreamHandler(sys.stdout)
+console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
@@ -69,7 +68,6 @@ def log_processed_order(conn, order_id, sku_dict):
     ))
     conn.commit()
     logging.info(f"✅ Logged order {order_id} → {sku_summary}")
-    print("✅ Console print test")
 
 def get_shipped_orders():
     url = 'https://ssapi.shipstation.com/orders'
@@ -101,15 +99,10 @@ def get_shipped_orders():
         except requests.RequestException as e:
             logging.error(f"Error fetching orders: {e}")
             break
-    print("🔁 API status code:", response.status_code)
-    print("🧾 API response preview:", response.text[:500])
-    logging.info(f"🔍 Retrieved {len(all_orders)} shipped orders from ShipStation")
-    print("🧪 Sample order data:")
-    print(all_orders[:1])
+
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
-    print(f"🔧 Attempting to subtract {qty} from {sku}")
     client = get_gspread_client()
     sheet = client.open("Kit BOMs").worksheet("inventory")
     data = sheet.get_all_records()
@@ -125,11 +118,8 @@ def subtract_from_google_sheet(sku, qty):
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
-    print("🚀 Script started")
     conn = init_db()
     orders = get_shipped_orders()
-    print(f"📦 Orders fetched: {len(orders)}")
-    logging.info(f"📦 Orders fetched: {len(orders)}")
     for order in orders:
         order_id = str(order.get("orderId"))
 
@@ -141,7 +131,6 @@ if __name__ == "__main__":
             ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
             if ship_date < ship_date_cutoff:
                 logging.info(f"⏩ Skipping old order {order_id} shipped on {ship_date}")
-                logging.info(f"✅ Processing order {order_id} from {ship_date}")
                 continue
         except Exception as e:
             logging.warning(f"⚠️ Could not parse shipDate for order {order_id}: {e}")
@@ -149,9 +138,7 @@ if __name__ == "__main__":
 
         if is_order_processed(conn, order_id):
             continue
-        
-        logging.info(f"🧾 Skipping already-logged order {order_id}")
-        
+
         items = order.get("items", [])
         sku_dict = {}
         for item in items:
