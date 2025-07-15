@@ -3,13 +3,15 @@ import requests
 import base64
 import sqlite3
 from datetime import datetime
-import streamlit as st
+from dotenv import load_dotenv
+import os
 
-API_KEY = st.secrets["SHIPSTATION_API_KEY"]
-API_SECRET = st.secrets["SHIPSTATION_API_SECRET"]
+load_dotenv()
+API_KEY = os.getenv("SHIPSTATION_API_KEY")
+API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
 
 if not API_KEY or not API_SECRET:
-    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in Streamlit secrets")
+    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET")
 
 DB_PATH = "order_log.db"
 
