@@ -101,7 +101,11 @@ def get_shipped_orders():
         except requests.RequestException as e:
             logging.error(f"Error fetching orders: {e}")
             break
+    print("🔁 API status code:", response.status_code)
+    print("🧾 API response preview:", response.text[:500])
     logging.info(f"🔍 Retrieved {len(all_orders)} shipped orders from ShipStation")
+    print("🧪 Sample order data:")
+    print(all_orders[:1])
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
@@ -124,6 +128,8 @@ if __name__ == "__main__":
     print("🚀 Script started")
     conn = init_db()
     orders = get_shipped_orders()
+    print(f"📦 Orders fetched: {len(orders)}")
+    logging.info(f"📦 Orders fetched: {len(orders)}")
     for order in orders:
         order_id = str(order.get("orderId"))
 
