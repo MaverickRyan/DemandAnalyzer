@@ -31,43 +31,43 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
         qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
         submitted = st.form_submit_button("Submit")
         if submitted:
-    kits = load_kits_from_sheets()
-    inventory = load_inventory_from_sheets()
+            kits = load_kits_from_sheets()
+            inventory = load_inventory_from_sheets()
 
-    if sku_input in kits and sku_input in inventory:
-        st.info(f"[KIT] Prepacked kit detected. Subtracting components from inventory.")
-        feedback = []
-        for comp in kits[sku_input]:
-            comp_sku = comp["sku"].strip().upper()
-            comp_qty = qty_input * comp["qty"]
-            old_stock = inventory.get(comp_sku, {}).get("stock", 0)
+            if sku_input in kits and sku_input in inventory:
+                st.info(f"[KIT] Prepacked kit detected. Subtracting components from inventory.")
+                feedback = []
+                for comp in kits[sku_input]:
+                    comp_sku = comp["sku"].strip().upper()
+                    comp_qty = qty_input * comp["qty"]
+                    old_stock = inventory.get(comp_sku, {}).get("stock", 0)
 
-            result = update_inventory_quantity(comp_sku, -comp_qty)
-            new_stock = max(old_stock - comp_qty, 0)
+                    result = update_inventory_quantity(comp_sku, -comp_qty)
+                    new_stock = max(old_stock - comp_qty, 0)
 
-            if result["success"]:
-                feedback.append(f"[STOCK] {comp_sku}: {old_stock} → {new_stock}")
+                    if result["success"]:
+                        feedback.append(f"[STOCK] {comp_sku}: {old_stock} → {new_stock}")
+                    else:
+                        feedback.append(f"❌ Component SKU '{comp_sku}' not found.")
+
+                for line in feedback[:4]:
+                    st.write(line)
+                if len(feedback) > 4:
+                    st.write(f"...and {len(feedback) - 4} more components.")
+
+                # Finally, update the kit SKU stock level
+                kit_result = update_inventory_quantity(sku_input, qty_input)
+                if kit_result["success"]:
+                    st.success(f"[OK] {qty_input} units of '{sku_input}' added to inventory. New total: {kit_result['new_qty']}")
+                else:
+                    st.warning(f"[WARN] Kit SKU '{sku_input}' could not be updated.")
+
             else:
-                feedback.append(f"❌ Component SKU '{comp_sku}' not found.")
-
-        for line in feedback[:4]:
-            st.write(line)
-        if len(feedback) > 4:
-            st.write(f"...and {len(feedback) - 4} more components.")
-
-        # Finally, update the kit SKU stock level
-        kit_result = update_inventory_quantity(sku_input, qty_input)
-        if kit_result["success"]:
-            st.success(f"[OK] {qty_input} units of '{sku_input}' added to inventory. New total: {kit_result['new_qty']}")
-        else:
-            st.warning(f"[WARN] Kit SKU '{sku_input}' could not be updated.")
-
-    else:
-        result = update_inventory_quantity(sku_input, qty_input)
-        if result["success"]:
-            st.success(f"✅ {qty_input} units added to {sku_input}. Stock updated from {result['old_qty']} → {result['new_qty']}.")
-        else:
-            st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+                result = update_inventory_quantity(sku_input, qty_input)
+                if result["success"]:
+                    st.success(f"✅ {qty_input} units added to {sku_input}. Stock updated from {result['old_qty']} → {result['new_qty']}.")
+                else:
+                    st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
 
 
