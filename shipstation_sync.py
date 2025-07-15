@@ -1,4 +1,4 @@
-# shipstation_sync.py (with local secrets, json, and full logging)
+# shipstation_sync.py (fully local .env & json-based)
 import requests
 import base64
 import sqlite3
@@ -6,33 +6,20 @@ from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+
 from dotenv import load_dotenv
 import os
-import logging
 
-# 🔧 Logging config
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-
-file_handler = logging.FileHandler("shipstation_sync.log")
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-# 🔐 Load secrets
 load_dotenv()
 API_KEY = os.getenv("SHIPSTATION_API_KEY")
 API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
+
 if not API_KEY or not API_SECRET:
     raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
 
-# 🔐 Google Sheets client from gspread_key.json
+# Gspread client from gspread_key.json
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.load(open("gspread_key.json")), scope)
@@ -65,7 +52,6 @@ def log_processed_order(conn, order_id, sku_dict):
         sku_summary
     ))
     conn.commit()
-    logging.info(f"✅ Logged order {order_id} → {sku_summary}")
 
 def get_shipped_orders():
     url = 'https://ssapi.shipstation.com/orders'
@@ -109,17 +95,49 @@ def subtract_from_google_sheet(sku, qty):
         if row_sku == sku:
             current_stock = int(row.get("Stock On Hand", 0))
             new_stock = max(current_stock - qty, 0)
-            sheet.update_cell(idx, 3, new_stock)
-            logging.info(f"📉 Updated {sku}: {current_stock} → {new_stock}")
+            sheet.update_cell(idx, 3, new_stock)  # Column C = Stock On Hand
+            logging.info(f"Updated {sku}: {current_stock} → {new_stock}")
             return
-    logging.warning(f"⚠️ SKU {sku} not found in inventory sheet")
+    logging.warning(f"SKU {sku} not found in inventory sheet")
 
-# 🚀 MAIN EXECUTION
+import logging
+
+# Logging setup
+logging.basicConfig(
+    filename="shipstation_sync.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.FileHandler("shipstation_sync.log"),
+        logging.StreamHandler()
+    ]
+)
+
+from datetime import date, timedelta
+
+# Only consider orders shipped in the last 7 days
+SHIP_CUTOFF_DAYS = 7
+ship_date_cutoff = date.today() - timedelta(days=SHIP_CUTOFF_DAYS)
+
+# MAIN EXECUTION
 if __name__ == "__main__":
     conn = init_db()
     orders = get_shipped_orders()
     for order in orders:
-        order_id = str(order.get("orderId"))
+    order_id = str(order.get("orderId"))
+
+    # 🛑 Skip orders shipped too long ago
+    ship_date_raw = order.get("shipDate")
+    if not ship_date_raw:
+        continue
+    try:
+        ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
+        if ship_date < ship_date_cutoff:
+            logging.info(f"⏩ Skipping old order {order_id} shipped on {ship_date}")
+            continue
+    except Exception as e:
+        logging.warning(f"⚠️ Could not parse shipDate for order {order_id}: {e}")
+        continue
         if is_order_processed(conn, order_id):
             continue
 
@@ -134,5 +152,6 @@ if __name__ == "__main__":
             subtract_from_google_sheet(sku, qty)
 
         log_processed_order(conn, order_id, sku_dict)
+        logging.info(f"Logged order {order_id} → {sku_dict}")
 
     conn.close()
