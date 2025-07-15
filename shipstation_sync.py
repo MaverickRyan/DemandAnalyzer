@@ -11,7 +11,7 @@ API_KEY = os.getenv("SHIPSTATION_API_KEY")
 API_SECRET = os.getenv("SHIPSTATION_API_SECRET")
 
 if not API_KEY or not API_SECRET:
-    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET")
+    raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
 
