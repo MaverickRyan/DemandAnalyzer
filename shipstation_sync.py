@@ -1,4 +1,4 @@
-# shipstation_sync.py (live mode, with 7-day cutoff + logging + debug tracing)
+# shipstation_sync.py (live mode, with 7-day cutoff + logging + batch retry)
 import requests
 import base64
 import sqlite3
@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 import os
 import logging
 import sys
+import time
+from gspread.exceptions import APIError
 from sheet_loader import load_kits_from_sheets, load_inventory_from_sheets
 
 logging.basicConfig(
@@ -78,9 +80,6 @@ def get_shipped_orders():
     all_orders = []
     page = 1
     MAX_PAGES = 100
-
-    # 🔎 Only request orders created in the past 7 days
-    SHIP_CUTOFF_DAYS = 7
     create_date_start = (datetime.today() - timedelta(days=SHIP_CUTOFF_DAYS)).strftime("%Y-%m-%d")
 
     while page <= MAX_PAGES:
@@ -90,7 +89,7 @@ def get_shipped_orders():
             'sortBy': 'createDate',
             'sortDir': 'DESC',
             'orderStatus': 'shipped',
-            'createDateStart': create_date_start  # ⬅️ Key addition to limit data
+            'createDateStart': create_date_start
         }
 
         try:
@@ -118,33 +117,46 @@ def get_shipped_orders():
     return all_orders
 
 def subtract_from_google_sheet(sheet, data, changes: dict):
-    """
-    Updates inventory for a dict of {sku: qty_to_subtract}
-    Applies all changes in one batch_update() request.
-    """
     updates = []
-    updated_skus = set()
+    sku_to_row = {row["SKU"].strip().upper(): idx + 2 for idx, row in enumerate(data)}
 
-    for idx, row in enumerate(data, start=2):  # index 2 = row 2 (skip header)
-        sku = row["SKU"].strip().upper()
-        if sku in changes:
-            qty_to_subtract = changes[sku]
-            old_stock = int(row.get("Stock On Hand", 0))
-            new_stock = max(old_stock - qty_to_subtract, 0)
+    for sku, delta in changes.items():
+        row_idx = sku_to_row.get(sku)
+        if not row_idx:
+            logging.warning(f"[WARN] SKU {sku} not found in inventory sheet")
+            continue
 
-            # Update row 2-based index, column C (index 3)
-            updates.append({
-                "range": f"C{idx}",
-                "values": [[str(new_stock)]]
-            })
-            logging.info(f"[STOCK] {sku}: {old_stock} → {new_stock} (Δ={qty_to_subtract})")
-            updated_skus.add(sku)
+        old_stock = int(data[row_idx - 2].get("Stock On Hand", 0))
+        new_stock = max(old_stock - delta, 0)
 
-    if updates:
-        sheet.batch_update([{"range": u["range"], "values": u["values"]} for u in updates])
-        logging.info(f"[BATCH] Updated {len(updates)} SKU(s) via batch_update.")
-    else:
-        logging.warning(f"[WARN] No matching SKUs found in sheet for: {', '.join(changes.keys())}")
+        updates.append({
+            "range": f"C{row_idx}",
+            "values": [[str(new_stock)]]
+        })
+        logging.info(f"[STOCK] {sku}: {old_stock} → {new_stock} (Δ={delta})")
+
+    if not updates:
+        logging.info("[STOCK] No valid SKUs to update.")
+        return
+
+    chunk_size = 50
+    for i in range(0, len(updates), chunk_size):
+        chunk = updates[i:i + chunk_size]
+        retry = 0
+        while retry < 5:
+            try:
+                sheet.batch_update([{"range": u["range"], "values": u["values"]} for u in chunk])
+                logging.info(f"[BATCH] Updated {len(chunk)} SKU(s) via batch_update.")
+                break
+            except APIError as e:
+                if "429" in str(e):
+                    wait_time = 2 ** retry
+                    logging.warning(f"[RETRY] Quota exceeded. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    retry += 1
+                else:
+                    logging.error(f"[ERROR] GSpread API error: {e}")
+                    break
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
@@ -192,9 +204,7 @@ if __name__ == "__main__":
 
         logging.info(f"🔧 Processing order {order_id} from {ship_date}")
 
-        # 📦 Build aggregate quantity changes across all SKUs/components
         sku_changes = {}
-
         for item in order.get("items", []):
             sku = (item.get("sku") or "").strip().upper()
             qty = item.get("quantity", 0)
@@ -203,22 +213,16 @@ if __name__ == "__main__":
 
             if sku in kits:
                 if sku in inventory:
-                    # Prepacked kit → subtract kit SKU only
                     sku_changes[sku] = sku_changes.get(sku, 0) + qty
                 else:
-                    # Virtual kit → subtract components
                     for comp in kits[sku]:
                         comp_sku = comp["sku"].strip().upper()
                         comp_qty = qty * comp["qty"]
                         sku_changes[comp_sku] = sku_changes.get(comp_sku, 0) + comp_qty
             else:
-                # Normal item
                 sku_changes[sku] = sku_changes.get(sku, 0) + qty
 
-        # 🔁 Batch subtract from Google Sheet
         subtract_from_google_sheet(sheet, sheet_data, sku_changes)
-
-        # 📝 Log processed order
         log_processed_order(conn, order_id, sku_changes)
 
     conn.close()
