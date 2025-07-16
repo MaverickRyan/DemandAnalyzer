@@ -77,9 +77,9 @@ def get_shipped_orders():
 
     all_orders = []
     page = 1
-    total_pages = 1
+    MAX_PAGES = 100
 
-    while page <= total_pages:
+    while page <= MAX_PAGES:
         params = {
             'pageSize': 500,
             'page': page,
@@ -87,14 +87,24 @@ def get_shipped_orders():
             'sortDir': 'DESC',
             'orderStatus': 'shipped'
         }
+
         try:
             logging.info(f"🔄 Requesting page {page} from ShipStation...")
             response = requests.get(url, headers=headers, params=params, timeout=15)
             response.raise_for_status()
             data = response.json()
-            all_orders.extend(data.get('orders', []))
-            total_pages = data.get('pages', 1)
+
+            orders = data.get('orders', [])
+            all_orders.extend(orders)
+
+            total_pages = data.get('pages') or 1  # fallback
+            logging.info(f"[PAGE] Page {page} of {total_pages} received")
+
+            if page >= total_pages:
+                break
+
             page += 1
+
         except requests.RequestException as e:
             logging.error(f"❌ Error fetching orders: {e}")
             break
