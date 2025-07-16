@@ -1,4 +1,4 @@
-# shipstation_sync.py (live mode, with 7-day cutoff + logging + full batching)
+# shipstation_sync.py (3-day cutoff, live mode, logging, batch update, retry)
 import requests
 import base64
 import sqlite3
@@ -32,7 +32,7 @@ if not API_KEY or not API_SECRET:
     raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
-SHIP_CUTOFF_DAYS = 7
+SHIP_CUTOFF_DAYS = 3
 ship_date_cutoff = date.today() - timedelta(days=SHIP_CUTOFF_DAYS)
 
 def get_gspread_client():
@@ -145,7 +145,7 @@ def subtract_from_google_sheet(sheet, data, changes: dict):
         retry = 0
         while retry < 5:
             try:
-                sheet.batch_update([{ "range": u["range"], "values": u["values"] } for u in chunk])
+                sheet.batch_update([{"range": u["range"], "values": u["values"]} for u in chunk])
                 logging.info(f"[BATCH] Updated {len(chunk)} SKU(s) via batch_update.")
                 break
             except APIError as e:
@@ -182,9 +182,6 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[ERR] Setup failed: {e}")
         sys.exit(1)
-
-    global_sku_changes = {}
-    processed_order_log = []
 
     for order in orders:
         order_id = str(order.get("orderId"))
@@ -225,15 +222,8 @@ if __name__ == "__main__":
             else:
                 sku_changes[sku] = sku_changes.get(sku, 0) + qty
 
-        for sku, qty in sku_changes.items():
-            global_sku_changes[sku] = global_sku_changes.get(sku, 0) + qty
-
-        processed_order_log.append((order_id, sku_changes))
-
-    subtract_from_google_sheet(sheet, sheet_data, global_sku_changes)
-
-    for order_id, sku_dict in processed_order_log:
-        log_processed_order(conn, order_id, sku_dict)
+        subtract_from_google_sheet(sheet, sheet_data, sku_changes)
+        log_processed_order(conn, order_id, sku_changes)
 
     conn.close()
     logging.info("✅ ShipStation Sync Completed")
