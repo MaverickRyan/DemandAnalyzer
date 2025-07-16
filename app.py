@@ -1,4 +1,6 @@
-# 📁 app.py
+# -------------------------
+# 📁 app.py (Streamlit-ready)
+# -------------------------
 import streamlit as st
 import pandas as pd
 import io
@@ -16,24 +18,28 @@ from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
 kits = load_kits_from_sheets()
-if st.sidebar.button("🔄 Refresh Inventory Now"):
-    st.session_state["inventory"] = load_inventory_from_sheets()
-
-inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
 # Sidebar filter
 st.sidebar.header("🗓️ Filter Orders by Date")
 default_start = datetime.now().date() - timedelta(days=14)
 default_end = datetime.now().date()
-start_date = st.sidebar.date_input("Start Date", default_start, key="start_date")
-end_date = st.sidebar.date_input("End Date", default_end, key="end_date")
+start_date = st.sidebar.date_input("Start Date", default_start, key="filter_start_date")
+end_date = st.sidebar.date_input("End Date", default_end, key="filter_end_date")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Inventory Controls")
+if st.sidebar.button("🔄 Refresh Inventory Now"):
+    st.session_state["inventory"] = load_inventory_from_sheets()
+
+inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
 # Title and Add Inventory Form
 st.title("📦 Fulfillment & Production Dashboard")
+st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
 with st.expander("➕ Add Received Inventory to Stock", expanded=False):
     with st.form("inventory_update_form"):
         sku_input = st.text_input("Enter SKU").strip().upper()
-        qty_input = st.number_input("Enter quantity received", step=0.01, min_value=0.01, format="%.2f")
+        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
         submitted = st.form_submit_button("Submit")
         if submitted:
             kits = load_kits_from_sheets()
@@ -74,6 +80,7 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 else:
                     st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
+
 # Pull orders
 orders = get_orders()
 
@@ -98,13 +105,12 @@ if not filtered_orders:
     st.stop()
 
 # Explode orders
-
 def explode_orders(orders, kits):
-    exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
+    exploded = defaultdict(lambda: {"total": 0, "from_kits": 0, "standalone": 0})
     for order in orders:
         for item in order.get("items", []):
             sku = (item.get("sku") or '').strip().upper()
-            qty = float(item.get("quantity", 0))
+            qty = item.get("quantity", 0)
             if sku in kits:
                 for comp in kits[sku]:
                     key = comp["sku"].strip().upper()
@@ -121,38 +127,36 @@ def explode_orders(orders, kits):
 sku_totals = explode_orders(filtered_orders, kits)
 
 # Build DataFrame
-data = []
-for sku, v in sku_totals.items():
+all_inventory_rows = []
+for sku in inventory_levels:
     info = inventory_levels.get(sku, {})
-    data.append({
+    total_needed = sku_totals.get(sku, {}).get("total", 0)
+    from_kits = sku_totals.get(sku, {}).get("from_kits", 0)
+    standalone = sku_totals.get(sku, {}).get("standalone", 0)
+    stock = info.get("stock", 0)
+    running = stock - total_needed
+    
+    all_inventory_rows.append({
         "Is Kit": "✅" if sku in kits and sku in inventory_levels else "",
         "SKU": sku,
         "Product Name": info.get("name", sku),
-        "Total Quantity Needed": v["total"],
-        "From Kits": v["from_kits"],
-        "Standalone Orders": v["standalone"],
-        "Stock On Hand": info.get("stock", 0)
+        "Total Quantity Needed": round(total_needed, 2),
+        "From Kits": round(from_kits, 2),
+        "Standalone Orders": round(standalone, 2),
+        "Stock On Hand": round(stock, 2),
+        "Qty Short": round(max(total_needed - stock, 0), 2),
+        "Running Inventory": round(max(running, 0), 2)
     })
 
-df = pd.DataFrame(data)
+df = pd.DataFrame(all_inventory_rows)
 if df.empty:
     st.warning("No data to display.")
     st.stop()
 
-# Filter relevant SKUs
-valid_skus = set(kits.keys()) | {comp["sku"] for kit in kits.values() for comp in kit} | set(inventory_levels.keys())
-df = df[df["SKU"].isin(valid_skus)]
-
-# Final calculations
-df["Qty Short"] = (df["Total Quantity Needed"] - df["Stock On Hand"]).clip(lower=0)
-df["Running Inventory"] = (df["Stock On Hand"] - df["Total Quantity Needed"]).clip(lower=0)
-
-# Display
-df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
-df = df.round({"Total Quantity Needed": 2, "From Kits": 2, "Standalone Orders": 2, "Stock On Hand": 2, "Qty Short": 2, "Running Inventory": 2})
-st.dataframe(df, use_container_width=True)
+# Sort and display
+st.dataframe(df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True), use_container_width=True)
 
 # Download
 csv_buffer = io.StringIO()
 df.to_csv(csv_buffer, index=False)
-st.download_button("📅 Download CSV", csv_buffer.getvalue(), "sku_fulfillment_summary.csv", "text/csv")
+st.download_button("🗕 Download CSV", csv_buffer.getvalue(), "sku_fulfillment_summary.csv", "text/csv")
