@@ -158,6 +158,10 @@ if __name__ == "__main__":
         logging.info("📄 Loading kits and inventory...")
         kits = load_kits_from_sheets()
         inventory = load_inventory_from_sheets()
+
+        client = get_gspread_client()
+        sheet = client.open("Kit BOMs").worksheet("inventory")
+        sheet_data = sheet.get_all_records()
         logging.info("✅ Sheets loaded")
 
         logging.info("🌐 Fetching orders from ShipStation...")
@@ -187,28 +191,35 @@ if __name__ == "__main__":
             continue
 
         logging.info(f"🔧 Processing order {order_id} from {ship_date}")
-        items = order.get("items", [])
-        sku_dict = {}
-        for item in items:
-            sku = (item.get("sku") or '').strip().upper()
+
+        # 📦 Build aggregate quantity changes across all SKUs/components
+        sku_changes = {}
+
+        for item in order.get("items", []):
+            sku = (item.get("sku") or "").strip().upper()
             qty = item.get("quantity", 0)
             if not sku:
                 continue
-            sku_dict[sku] = sku_dict.get(sku, 0) + qty
 
-        for sku, qty in sku_dict.items():
             if sku in kits:
                 if sku in inventory:
-                    subtract_from_google_sheet(sku, qty)
+                    # Prepacked kit → subtract kit SKU only
+                    sku_changes[sku] = sku_changes.get(sku, 0) + qty
                 else:
+                    # Virtual kit → subtract components
                     for comp in kits[sku]:
                         comp_sku = comp["sku"].strip().upper()
                         comp_qty = qty * comp["qty"]
-                        subtract_from_google_sheet(comp_sku, comp_qty)
+                        sku_changes[comp_sku] = sku_changes.get(comp_sku, 0) + comp_qty
             else:
-                subtract_from_google_sheet(sku, qty)
+                # Normal item
+                sku_changes[sku] = sku_changes.get(sku, 0) + qty
 
-        log_processed_order(conn, order_id, sku_dict)
+        # 🔁 Batch subtract from Google Sheet
+        subtract_from_google_sheet(sheet, sheet_data, sku_changes)
+
+        # 📝 Log processed order
+        log_processed_order(conn, order_id, sku_changes)
 
     conn.close()
     logging.info("✅ ShipStation Sync Completed")
