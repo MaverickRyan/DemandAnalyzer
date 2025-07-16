@@ -1,4 +1,4 @@
-# shipstation_sync.py (live mode, with 7-day cutoff + logging)
+# shipstation_sync.py (live mode, with 7-day cutoff + logging + debug tracing)
 import requests
 import base64
 import sqlite3
@@ -88,6 +88,7 @@ def get_shipped_orders():
             'orderStatus': 'shipped'
         }
         try:
+            logging.info(f"🔄 Requesting page {page} from ShipStation...")
             response = requests.get(url, headers=headers, params=params, timeout=15)
             response.raise_for_status()
             data = response.json()
@@ -95,10 +96,10 @@ def get_shipped_orders():
             total_pages = data.get('pages', 1)
             page += 1
         except requests.RequestException as e:
-            logging.error(f"Error fetching orders: {e}")
+            logging.error(f"❌ Error fetching orders: {e}")
             break
 
-    logging.info(f"[ORDERS] Total shipped orders received: {len(all_orders)}")
+    logging.info(f"📦 Total shipped orders received: {len(all_orders)}")
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
@@ -111,23 +112,30 @@ def subtract_from_google_sheet(sku, qty):
             current_stock = int(row.get("Stock On Hand", 0))
             new_stock = max(current_stock - qty, 0)
             sheet.update_cell(idx, 3, new_stock)
-            logging.info(f"[STOCK] Updated {sku}: {current_stock} → {new_stock}")
+            logging.info(f"[STOCK] {sku}: {current_stock} → {new_stock} (Δ={qty})")
             return
     logging.warning(f"[WARN] SKU {sku} not found in inventory sheet")
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
     logging.info("🚀 ShipStation Sync Started")
-    conn = init_db()
-    kits = load_kits_from_sheets()
-    inventory = load_inventory_from_sheets()
 
     try:
+        logging.info("🛠 Initializing database...")
+        conn = init_db()
+        logging.info("✅ Database ready")
+
+        logging.info("📄 Loading kits and inventory...")
+        kits = load_kits_from_sheets()
+        inventory = load_inventory_from_sheets()
+        logging.info("✅ Sheets loaded")
+
+        logging.info("🌐 Fetching orders from ShipStation...")
         orders = get_shipped_orders()
+        logging.info(f"✅ Retrieved {len(orders)} orders")
     except Exception as e:
-        logging.error(f"[ERR] Failed to retrieve orders: {e}")
-        conn.close()
-        raise
+        logging.error(f"[ERR] Setup failed: {e}")
+        sys.exit(1)
 
     for order in orders:
         order_id = str(order.get("orderId"))
@@ -145,8 +153,10 @@ if __name__ == "__main__":
             continue
 
         if is_order_processed(conn, order_id):
+            logging.info(f"⏩ Already processed order {order_id}")
             continue
 
+        logging.info(f"🔧 Processing order {order_id} from {ship_date}")
         items = order.get("items", [])
         sku_dict = {}
         for item in items:
@@ -159,10 +169,8 @@ if __name__ == "__main__":
         for sku, qty in sku_dict.items():
             if sku in kits:
                 if sku in inventory:
-                    # Prepacked kit: subtract the main kit SKU only
                     subtract_from_google_sheet(sku, qty)
                 else:
-                    # Virtual kit: subtract its components
                     for comp in kits[sku]:
                         comp_sku = comp["sku"].strip().upper()
                         comp_qty = qty * comp["qty"]
