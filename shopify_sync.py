@@ -35,9 +35,9 @@ if not SHOPIFY_LOCATION_ID:
 
 # --- Helpers ---
 def get_inventory_items():
-    """Fetch all product variants with SKU and inventory_item_id."""
+    """Fetch all product variants with SKU, inventory_item_id, and name."""
     endpoint = f"https://{SHOP_URL}/admin/api/2023-10/products.json?limit=250"
-    skus_to_inventory_id = {}
+    sku_map = {}
 
     while endpoint:
         resp = requests.get(endpoint, headers=HEADERS)
@@ -45,11 +45,18 @@ def get_inventory_items():
         products = resp.json().get("products", [])
 
         for product in products:
+            product_title = product.get("title", "")
             for variant in product.get("variants", []):
-                sku = (variant.get("sku") or '').strip().upper()
+                sku = (variant.get("sku") or "").strip().upper()
                 inv_id = variant.get("inventory_item_id")
+                variant_title = variant.get("title", "")
+                name = f"{product_title} - {variant_title}".strip(" -")
+
                 if sku:
-                    skus_to_inventory_id[sku] = inv_id
+                    sku_map[sku] = {
+                        "inventory_item_id": inv_id,
+                        "name": name
+                    }
 
         # Handle pagination
         link_header = resp.headers.get("Link", "")
@@ -60,12 +67,14 @@ def get_inventory_items():
                 break
         endpoint = next_link
 
-    return skus_to_inventory_id
+    return sku_map
 
-def update_inventory_level(inventory_item_id, available):
+def update_inventory_level(sku, inventory_item_id, available, name=None):
     """Push inventory to Shopify for a given inventory item ID."""
+    label = f"SKU {sku}" + (f" ({name})" if name else "")
+    
     if DRY_RUN:
-        logging.info(f"[DRY-RUN] Would update {inventory_item_id} → {available}")
+        logging.info(f"[DRY-RUN] Would update {label} → {available}")
         return
 
     endpoint = f"https://{SHOP_URL}/admin/api/2023-10/inventory_levels/set.json"
@@ -76,9 +85,9 @@ def update_inventory_level(inventory_item_id, available):
     }
     response = requests.post(endpoint, headers=HEADERS, json=payload)
     if response.status_code == 200:
-        logging.info(f"✅ Updated {inventory_item_id} to {available}")
+        logging.info(f"✅ Updated {label} to {available}")
     else:
-        logging.error(f"❌ Failed to update {inventory_item_id}: {response.text}")
+        logging.error(f"❌ Failed to update {label}: {response.text}")
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -91,15 +100,13 @@ if __name__ == "__main__":
     for sku, info in inv_data.items():
         stock = info.get("stock", 0)
 
-        # Virtual kit handling
-        if sku not in sku_to_inventory_id and sku in kits:
+        if sku in kits and sku not in sku_map:
             components = kits[sku]
-            min_possible = min(inv_data.get(comp["sku"].upper(), {}).get("stock", 0) // comp["qty"] for comp in components)
-            stock = min_possible
+            stock = min(inv_data.get(comp["sku"].upper(), {}).get("stock", 0) // comp["qty"] for comp in components)
 
-        inv_id = sku_to_inventory_id.get(sku)
-        if inv_id is not None:
-            update_inventory_level(inv_id, stock)
+        entry = sku_map.get(sku)
+        if entry:
+            update_inventory_level(sku, entry["inventory_item_id"], stock, name=entry["name"])
         else:
             logging.warning(f"⚠️ SKU {sku} not found in Shopify")
 
