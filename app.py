@@ -1,6 +1,4 @@
-# -------------------------
-# 📁 app.py (Streamlit-ready)
-# -------------------------
+# 📁 app.py
 import streamlit as st
 import pandas as pd
 import io
@@ -18,28 +16,24 @@ from streamlit_autorefresh import st_autorefresh
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
 kits = load_kits_from_sheets()
-
-# Sidebar filter
-st.sidebar.header("🗓️ Filter Orders by Date")
-default_start = datetime.now().date() - timedelta(days=14)
-default_end = datetime.now().date()
-start_date = st.sidebar.date_input("Start Date", default_start, key="filter_start_date")
-end_date = st.sidebar.date_input("End Date", default_end, key="filter_end_date")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
 inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
+# Sidebar filter
+st.sidebar.header("🗓️ Filter Orders by Date")
+default_start = datetime.now().date() - timedelta(days=14)
+default_end = datetime.now().date()
+start_date = st.sidebar.date_input("Start Date", default_start, key="start_date")
+end_date = st.sidebar.date_input("End Date", default_end, key="end_date")
+
 # Title and Add Inventory Form
 st.title("📦 Fulfillment & Production Dashboard")
-st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
 with st.expander("➕ Add Received Inventory to Stock", expanded=False):
     with st.form("inventory_update_form"):
         sku_input = st.text_input("Enter SKU").strip().upper()
-        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
+        qty_input = st.number_input("Enter quantity received", step=0.01, min_value=0.01, format="%.2f")
         submitted = st.form_submit_button("Submit")
         if submitted:
             kits = load_kits_from_sheets()
@@ -80,8 +74,6 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 else:
                     st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
-
-
 # Pull orders
 orders = get_orders()
 
@@ -108,11 +100,11 @@ if not filtered_orders:
 # Explode orders
 
 def explode_orders(orders, kits):
-    exploded = defaultdict(lambda: {"total": 0, "from_kits": 0, "standalone": 0})
+    exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
     for order in orders:
         for item in order.get("items", []):
             sku = (item.get("sku") or '').strip().upper()
-            qty = item.get("quantity", 0)
+            qty = float(item.get("quantity", 0))
             if sku in kits:
                 for comp in kits[sku]:
                     key = comp["sku"].strip().upper()
@@ -157,6 +149,7 @@ df["Running Inventory"] = (df["Stock On Hand"] - df["Total Quantity Needed"]).cl
 
 # Display
 df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
+df = df.round({"Total Quantity Needed": 2, "From Kits": 2, "Standalone Orders": 2, "Stock On Hand": 2, "Qty Short": 2, "Running Inventory": 2})
 st.dataframe(df, use_container_width=True)
 
 # Download
