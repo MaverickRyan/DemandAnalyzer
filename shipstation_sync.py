@@ -79,13 +79,18 @@ def get_shipped_orders():
     page = 1
     MAX_PAGES = 100
 
+    # 🔎 Only request orders created in the past 7 days
+    SHIP_CUTOFF_DAYS = 7
+    create_date_start = (datetime.today() - timedelta(days=SHIP_CUTOFF_DAYS)).strftime("%Y-%m-%d")
+
     while page <= MAX_PAGES:
         params = {
             'pageSize': 500,
             'page': page,
-            'sortBy': 'modifyDate',
+            'sortBy': 'createDate',
             'sortDir': 'DESC',
-            'orderStatus': 'shipped'
+            'orderStatus': 'shipped',
+            'createDateStart': create_date_start  # ⬅️ Key addition to limit data
         }
 
         try:
@@ -97,7 +102,7 @@ def get_shipped_orders():
             orders = data.get('orders', [])
             all_orders.extend(orders)
 
-            total_pages = data.get('pages') or 1  # fallback
+            total_pages = data.get('pages') or 1
             logging.info(f"[PAGE] Page {page} of {total_pages} received")
 
             if page >= total_pages:
