@@ -2,13 +2,20 @@
 # 📁 sheet_loader.py (Streamlit-ready)
 # -----------------------------
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import json
+import os
 from collections import defaultdict
+from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 
 def get_gspread_client():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gspread_key"]), scope)
+    if os.getenv("STREAMLIT_RUNTIME") == "true":
+        import streamlit as st
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gspread_key"]), scope)
+    else:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_key.json", scope)
     return gspread.authorize(creds)
 
 def load_kits_from_sheets():
