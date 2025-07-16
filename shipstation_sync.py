@@ -1,4 +1,4 @@
-# shipstation_sync.py (with 7-day cutoff + logging)
+# shipstation_sync.py (live mode, with 7-day cutoff + logging)
 import requests
 import base64
 import sqlite3
@@ -9,9 +9,8 @@ import json
 from dotenv import load_dotenv
 import os
 import logging
-
-import logging
 import sys
+from sheet_loader import load_kits_from_sheets, load_inventory_from_sheets
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,12 +30,9 @@ if not API_KEY or not API_SECRET:
     raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
-
-# [OK] Only consider orders shipped in the last 7 days
 SHIP_CUTOFF_DAYS = 7
 ship_date_cutoff = date.today() - timedelta(days=SHIP_CUTOFF_DAYS)
 
-# 🔐 Google Sheets client from gspread_key.json
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.load(open("gspread_key.json")), scope)
@@ -83,7 +79,7 @@ def get_shipped_orders():
     page = 1
     total_pages = 1
 
-    while page == 1:  # DEBUG: limit to 1 page
+    while page <= total_pages:
         params = {
             'pageSize': 500,
             'page': page,
@@ -93,20 +89,16 @@ def get_shipped_orders():
         }
         try:
             response = requests.get(url, headers=headers, params=params, timeout=15)
-            print(f"[HTTP] API status: {response.status_code}")
-            print(f"[RESP] API response preview: {response.text[:300]}")
             response.raise_for_status()
-            print("✅ ShipStation API request succeeded")
             data = response.json()
             all_orders.extend(data.get('orders', []))
             total_pages = data.get('pages', 1)
             page += 1
         except requests.RequestException as e:
             logging.error(f"Error fetching orders: {e}")
-            print(f"❌ Request error: {e}")
             break
 
-    print(f"[ORDERS] Total shipped orders received: {len(all_orders)}")
+    logging.info(f"[ORDERS] Total shipped orders received: {len(all_orders)}")
     return all_orders
 
 def subtract_from_google_sheet(sku, qty):
@@ -123,30 +115,62 @@ def subtract_from_google_sheet(sku, qty):
             return
     logging.warning(f"[WARN] SKU {sku} not found in inventory sheet")
 
-# [START] MAIN EXECUTION
+# 🚀 MAIN EXECUTION
 if __name__ == "__main__":
-    print("🚀 Entered main function")
+    logging.info("🚀 ShipStation Sync Started")
+    conn = init_db()
+    kits = load_kits_from_sheets()
+    inventory = load_inventory_from_sheets()
 
     try:
-        load_dotenv()
-        print("✅ dotenv loaded")
-        print("🔐 API Key prefix:", API_KEY[:4])
-    except Exception as e:
-        print("❌ dotenv error:", e)
-
-    try:
-        print("[GSPREAD] Testing Google Sheets client...")
-        get_gspread_client()
-        print("✅ Google Sheets connection successful")
-    except Exception as e:
-        print("❌ Google Sheets connection error:", e)
-
-    try:
-        print("🌐 Fetching orders from ShipStation...")
         orders = get_shipped_orders()
-        print(f"📦 Orders fetched: {len(orders)}")
-        print("[SAMPLE] Sample order:", orders[0] if orders else "(none)")
     except Exception as e:
-        print("❌ Error fetching orders:", e)
+        logging.error(f"[ERR] Failed to retrieve orders: {e}")
+        conn.close()
+        raise
 
-    print("✅ Debug mode complete")
+    for order in orders:
+        order_id = str(order.get("orderId"))
+
+        ship_date_raw = order.get("shipDate") or order.get("modifyDate")
+        if not ship_date_raw:
+            continue
+
+        try:
+            ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
+            if ship_date < ship_date_cutoff:
+                continue
+        except Exception as e:
+            logging.warning(f"[WARN] Could not parse ship date for order {order_id}: {e}")
+            continue
+
+        if is_order_processed(conn, order_id):
+            continue
+
+        items = order.get("items", [])
+        sku_dict = {}
+        for item in items:
+            sku = (item.get("sku") or '').strip().upper()
+            qty = item.get("quantity", 0)
+            if not sku:
+                continue
+            sku_dict[sku] = sku_dict.get(sku, 0) + qty
+
+        for sku, qty in sku_dict.items():
+            if sku in kits:
+                if sku in inventory:
+                    # Prepacked kit: subtract the main kit SKU only
+                    subtract_from_google_sheet(sku, qty)
+                else:
+                    # Virtual kit: subtract its components
+                    for comp in kits[sku]:
+                        comp_sku = comp["sku"].strip().upper()
+                        comp_qty = qty * comp["qty"]
+                        subtract_from_google_sheet(comp_sku, comp_qty)
+            else:
+                subtract_from_google_sheet(sku, qty)
+
+        log_processed_order(conn, order_id, sku_dict)
+
+    conn.close()
+    logging.info("✅ ShipStation Sync Completed")
