@@ -16,9 +16,10 @@ logging.basicConfig(
 )
 
 load_dotenv()
+DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 SHOP_URL = os.getenv("SHOPIFY_SHOP_URL")
 ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
+logging.info(f"[DEBUG] DRY_RUN = {DRY_RUN}")
 
 if not SHOP_URL or not ACCESS_TOKEN:
     raise ValueError("Missing SHOPIFY_SHOP_URL or SHOPIFY_ACCESS_TOKEN in .env")
@@ -37,7 +38,7 @@ if not SHOPIFY_LOCATION_ID:
 def get_inventory_items():
     """Fetch all product variants with SKU, inventory_item_id, and name."""
     endpoint = f"https://{SHOP_URL}/admin/api/2023-10/products.json?limit=250"
-    sku_map = {}
+    sku_to_inventory_id = {}
 
     while endpoint:
         resp = requests.get(endpoint, headers=HEADERS)
@@ -53,7 +54,7 @@ def get_inventory_items():
                 name = f"{product_title} - {variant_title}".strip(" -")
 
                 if sku:
-                    sku_map[sku] = {
+                    sku_to_inventory_id[sku] = {
                         "inventory_item_id": inv_id,
                         "name": name
                     }
@@ -67,7 +68,7 @@ def get_inventory_items():
                 break
         endpoint = next_link
 
-    return sku_map
+    return sku_to_inventory_id
 
 def update_inventory_level(sku, inventory_item_id, available, name=None):
     """Push inventory to Shopify for a given inventory item ID."""
@@ -100,11 +101,11 @@ if __name__ == "__main__":
     for sku, info in inv_data.items():
         stock = info.get("stock", 0)
 
-        if sku in kits and sku not in sku_map:
+        if sku in kits and sku not in sku_to_inventory_id:
             components = kits[sku]
             stock = min(inv_data.get(comp["sku"].upper(), {}).get("stock", 0) // comp["qty"] for comp in components)
 
-        entry = sku_map.get(sku)
+        entry = sku_to_inventory_id.get(sku)
         if entry:
             update_inventory_level(sku, entry["inventory_item_id"], stock, name=entry["name"])
         else:
