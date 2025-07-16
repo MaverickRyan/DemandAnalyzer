@@ -117,19 +117,34 @@ def get_shipped_orders():
     logging.info(f"📦 Total shipped orders received: {len(all_orders)}")
     return all_orders
 
-def subtract_from_google_sheet(sku, qty):
-    client = get_gspread_client()
-    sheet = client.open("Kit BOMs").worksheet("inventory")
-    data = sheet.get_all_records()
-    for idx, row in enumerate(data, start=2):
-        row_sku = row["SKU"].strip().upper()
-        if row_sku == sku:
-            current_stock = int(row.get("Stock On Hand", 0))
-            new_stock = max(current_stock - qty, 0)
-            sheet.update_cell(idx, 3, new_stock)
-            logging.info(f"[STOCK] {sku}: {current_stock} → {new_stock} (Δ={qty})")
-            return
-    logging.warning(f"[WARN] SKU {sku} not found in inventory sheet")
+def subtract_from_google_sheet(sheet, data, changes: dict):
+    """
+    Updates inventory for a dict of {sku: qty_to_subtract}
+    Applies all changes in one batch_update() request.
+    """
+    updates = []
+    updated_skus = set()
+
+    for idx, row in enumerate(data, start=2):  # index 2 = row 2 (skip header)
+        sku = row["SKU"].strip().upper()
+        if sku in changes:
+            qty_to_subtract = changes[sku]
+            old_stock = int(row.get("Stock On Hand", 0))
+            new_stock = max(old_stock - qty_to_subtract, 0)
+
+            # Update row 2-based index, column C (index 3)
+            updates.append({
+                "range": f"C{idx}",
+                "values": [[str(new_stock)]]
+            })
+            logging.info(f"[STOCK] {sku}: {old_stock} → {new_stock} (Δ={qty_to_subtract})")
+            updated_skus.add(sku)
+
+    if updates:
+        sheet.batch_update([{"range": u["range"], "values": u["values"]} for u in updates])
+        logging.info(f"[BATCH] Updated {len(updates)} SKU(s) via batch_update.")
+    else:
+        logging.warning(f"[WARN] No matching SKUs found in sheet for: {', '.join(changes.keys())}")
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
