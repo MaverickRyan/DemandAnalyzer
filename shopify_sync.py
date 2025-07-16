@@ -95,7 +95,7 @@ if __name__ == "__main__":
     sku_map = get_inventory_items()
 
     # Combine all relevant SKUs: SKUs in inventory sheet + SKUs in Shopify
-    all_skus = set(inv_data.keys()) | set(sku_map.keys())
+    all_skus = set(inv_data.keys()) | set(kits.keys())
 
     for sku in all_skus:
         norm_sku = sku.strip().upper()
