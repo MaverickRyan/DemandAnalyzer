@@ -9,13 +9,21 @@ from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 
 def get_gspread_client():
-    if os.getenv("STREAMLIT_RUNTIME") == "true":
-        import streamlit as st
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gspread_key"]), scope)
-    else:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("gspread_key.json", scope)
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+    try:
+        # 🧠 Running in Streamlit with st.secrets
+        if "gspread_key" in st.secrets:
+            creds_dict = dict(st.secrets["gspread_key"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        else:
+            raise KeyError("gspread_key not found in st.secrets")
+
+    except Exception:
+        # 🧪 Fallback for local scripts like shipstation_sync.py
+        with open("gspread_key.json") as f:
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(json.load(f), scope)
+
     return gspread.authorize(creds)
 
 def load_kits_from_sheets():
