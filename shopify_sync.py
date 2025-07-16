@@ -8,11 +8,6 @@ import sys
 from dotenv import load_dotenv
 from sheet_loader import load_inventory_from_sheets, load_kits_from_sheets
 
-SHOPIFY_LOCATION_ID = os.getenv("SHOPIFY_LOCATION_ID")
-if not SHOPIFY_LOCATION_ID:
-    logging.error("❌ SHOPIFY_LOCATION_ID is missing from your .env file")
-    sys.exit(1)
-
 # --- Setup ---
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +27,11 @@ HEADERS = {
     "X-Shopify-Access-Token": ACCESS_TOKEN,
     "Content-Type": "application/json"
 }
+
+SHOPIFY_LOCATION_ID = os.getenv("SHOPIFY_LOCATION_ID")
+if not SHOPIFY_LOCATION_ID:
+    logging.error("❌ SHOPIFY_LOCATION_ID is missing from your .env file")
+    sys.exit(1)
 
 # --- Helpers ---
 def get_inventory_items():
