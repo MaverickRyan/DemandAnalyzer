@@ -137,7 +137,9 @@ def explode_orders(orders, kits):
 
 # Build DataFrame
 all_inventory_rows = []
-for sku in inventory_levels:
+all_skus = set(inventory_levels.keys()) | set(sku_totals.keys())
+
+for sku in sorted(all_skus):
     info = inventory_levels.get(sku, {})
     total_needed = sku_totals.get(sku, {}).get("total", 0.0)
     from_kits = sku_totals.get(sku, {}).get("from_kits", 0.0)
@@ -148,7 +150,7 @@ for sku in inventory_levels:
     all_inventory_rows.append({
         "Is Kit": "✅" if sku in kits and sku in inventory_levels else "",
         "SKU": sku,
-        "Product Name": info.get("name", sku),
+        "Product Name": info.get("name", sku) if "name" in info else "(not in sheet)",
         "Total Quantity Needed": round(total_needed, 2),
         "From Kits": round(from_kits, 2),
         "Standalone Orders": round(standalone, 2),
@@ -156,6 +158,7 @@ for sku in inventory_levels:
         "Qty Short": round(max(total_needed - stock, 0), 2),
         "Running Inventory": round(max(running, 0), 2)
     })
+
 
 df = pd.DataFrame(all_inventory_rows)
 if df.empty:
