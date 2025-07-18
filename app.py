@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Streamlit-ready with fractional quantity support)
+# 📁 app.py (Streamlit-ready)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -12,8 +12,8 @@ from sheet_loader import (
     load_inventory_from_sheets,
     update_inventory_quantity
 )
-from streamlit_autorefresh import st_autorefresh
 
+from streamlit_autorefresh import st_autorefresh
 # 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
@@ -39,7 +39,7 @@ st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}
 with st.expander("➕ Add Received Inventory to Stock", expanded=False):
     with st.form("inventory_update_form"):
         sku_input = st.text_input("Enter SKU").strip().upper()
-        qty_input = st.number_input("Enter quantity received", step=0.01, min_value=0.01, format="%.2f")
+        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
         submitted = st.form_submit_button("Submit")
         if submitted:
             kits = load_kits_from_sheets()
@@ -66,12 +66,12 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 if len(feedback) > 4:
                     st.write(f"...and {len(feedback) - 4} more components.")
 
-                # Update kit SKU stock
                 kit_result = update_inventory_quantity(sku_input, qty_input)
                 if kit_result["success"]:
                     st.success(f"[OK] {qty_input} units of '{sku_input}' added to inventory. New total: {kit_result['new_qty']}")
                 else:
                     st.warning(f"[WARN] Kit SKU '{sku_input}' could not be updated.")
+
             else:
                 result = update_inventory_quantity(sku_input, qty_input)
                 if result["success"]:
@@ -81,6 +81,7 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
 
 # Pull orders
 orders = get_orders()
+
 filtered_orders = []
 for order in orders:
     payment_date_str = order.get("paymentDate")
@@ -141,8 +142,8 @@ for sku in inventory_levels:
         "From Kits": round(from_kits, 2),
         "Standalone Orders": round(standalone, 2),
         "Stock On Hand": round(stock, 2),
-        "Qty Short": round(max(total_needed - stock, 0.0), 2),
-        "Running Inventory": round(max(running, 0.0), 2)
+        "Qty Short": round(max(total_needed - stock, 0), 2),
+        "Running Inventory": round(running, 2)
     })
 
 df = pd.DataFrame(all_inventory_rows)
@@ -150,11 +151,10 @@ if df.empty:
     st.warning("No data to display.")
     st.stop()
 
-# Display
-df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
-st.dataframe(df, use_container_width=True)
+# Sort and display
+st.dataframe(df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True), use_container_width=True)
 
-# Export
+# Download
 csv_buffer = io.StringIO()
 df.to_csv(csv_buffer, index=False)
-st.download_button("🗕 Download CSV", csv_buffer.getvalue(), "sku_fulfillment_summary.csv", "text/csv")
+st.download_button("🗅 Download CSV", csv_buffer.getvalue(), "sku_fulfillment_summary.csv", "text/csv")
