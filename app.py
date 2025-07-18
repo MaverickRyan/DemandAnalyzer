@@ -1,4 +1,4 @@
-# 📁 app.py (Streamlit-ready with debug logging)
+# 📁 app.py (Final clean version)
 import streamlit as st
 import pandas as pd
 import io
@@ -12,6 +12,7 @@ from sheet_loader import (
 )
 from streamlit_autorefresh import st_autorefresh
 
+# 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
 kits = load_kits_from_sheets()
@@ -36,6 +37,7 @@ st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}
 
 # Pull orders
 orders = get_orders()
+
 filtered_orders = []
 for order in orders:
     payment_date_str = order.get("paymentDate")
@@ -56,7 +58,7 @@ if not filtered_orders:
     st.warning("No orders found in the selected date range.")
     st.stop()
 
-# Explode orders with debug logging
+# Explode orders
 def explode_orders(orders, kits):
     exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
     for order in orders:
@@ -64,14 +66,10 @@ def explode_orders(orders, kits):
             sku = (item.get("sku") or '').strip().upper()
             qty = item.get("quantity", 0)
             if sku in kits:
-                st.write(f"[KIT FOUND] {sku} → Quantity Ordered: {qty}")
                 for comp in kits[sku]:
-                    comp_sku = comp["sku"].strip().upper()
-                    comp_qty = float(comp["qty"])
-                    total = qty * comp_qty
-                    st.write(f" ↪ Component: {comp_sku} × {comp_qty} = {total}")
-                    exploded[comp_sku]["total"] += total
-                    exploded[comp_sku]["from_kits"] += total
+                    key = comp["sku"].strip().upper()
+                    exploded[key]["total"] += qty * float(comp["qty"])
+                    exploded[key]["from_kits"] += qty * float(comp["qty"])
                 if sku in inventory_levels:
                     exploded[sku]["total"] += qty
                     exploded[sku]["standalone"] += qty
@@ -91,6 +89,7 @@ for sku in inventory_levels:
     standalone = sku_totals.get(sku, {}).get("standalone", 0.0)
     stock = info.get("stock", 0.0)
     running = stock - total
+
     rows.append({
         "Is Kit": "✅" if sku in kits and sku in inventory_levels else "",
         "SKU": sku,
