@@ -31,12 +31,18 @@ def load_kits_from_sheets():
     rows = sheet.get_all_records()
     kits = defaultdict(list)
     for row in rows:
-        kits[row["Kit SKU"].strip()].append({
-            "sku": row["Component SKU"].strip(),
+        try:
+            qty = float(row["Quantity"])
+        except Exception:
+            qty = 0.0  # fallback
+
+        kits[row["Kit SKU"].strip().upper()].append({
+            "sku": row["Component SKU"].strip().upper(),
             "name": row["Component Name"].strip(),
-            "qty": float(row["Quantity"])  # ensure float
+            "qty": qty
         })
     return dict(kits)
+
 
 def load_inventory_from_sheets():
     client = get_gspread_client()
