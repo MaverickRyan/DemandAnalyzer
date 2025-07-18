@@ -106,34 +106,25 @@ if not filtered_orders:
 
 def explode_orders(orders, kits):
     exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
-
     for order in orders:
         for item in order.get("items", []):
             sku = (item.get("sku") or '').strip().upper()
-            qty = float(item.get("quantity", 0) or 0)
+            qty = item.get("quantity", 0)
 
             if sku in kits:
-                # Kit exploded into components
                 for comp in kits[sku]:
                     comp_sku = comp["sku"].strip().upper()
-                    comp_qty_per_kit = float(comp["qty"])
-                    total_comp_qty = qty * comp_qty_per_kit
-                    exploded[comp_sku]["total"] += total_comp_qty
-                    exploded[comp_sku]["from_kits"] += total_comp_qty
-
-                    # DEBUG (optional): print fractional expansion
-                    if comp_qty_per_kit < 1:
-                        st.write(f"[DEBUG] Kit {sku}: {qty} × {comp_qty_per_kit} of {comp_sku} = {total_comp_qty}")
+                    comp_qty = float(comp["qty"])
+                    exploded[comp_sku]["total"] += qty * comp_qty
+                    exploded[comp_sku]["from_kits"] += qty * comp_qty
+                if sku in inventory_levels:
+                    exploded[sku]["total"] += qty
+                    exploded[sku]["standalone"] += qty
             else:
                 exploded[sku]["total"] += qty
                 exploded[sku]["standalone"] += qty
-
-            # If the kit itself is inventoried (e.g., prepacked kits), track it too
-            if sku in inventory_levels:
-                exploded[sku]["total"] += qty
-                exploded[sku]["standalone"] += qty
-
     return exploded
+
 
 
 # Build DataFrame
