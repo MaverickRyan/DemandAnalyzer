@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Streamlit-ready)
+# 📁 app.py (Streamlit-ready with fractional quantity support)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -12,8 +12,8 @@ from sheet_loader import (
     load_inventory_from_sheets,
     update_inventory_quantity
 )
-
 from streamlit_autorefresh import st_autorefresh
+
 # 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
@@ -39,7 +39,7 @@ st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}
 with st.expander("➕ Add Received Inventory to Stock", expanded=False):
     with st.form("inventory_update_form"):
         sku_input = st.text_input("Enter SKU").strip().upper()
-        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
+        qty_input = st.number_input("Enter quantity received", step=0.01, min_value=0.01, format="%.2f")
         submitted = st.form_submit_button("Submit")
         if submitted:
             kits = load_kits_from_sheets()
@@ -50,7 +50,7 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 feedback = []
                 for comp in kits[sku_input]:
                     comp_sku = comp["sku"].strip().upper()
-                    comp_qty = qty_input * comp["qty"]
+                    comp_qty = qty_input * float(comp["qty"])
                     old_stock = inventory.get(comp_sku, {}).get("stock", 0)
 
                     result = update_inventory_quantity(comp_sku, -comp_qty)
@@ -66,13 +66,12 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 if len(feedback) > 4:
                     st.write(f"...and {len(feedback) - 4} more components.")
 
-                # Finally, update the kit SKU stock level
+                # Update kit SKU stock
                 kit_result = update_inventory_quantity(sku_input, qty_input)
                 if kit_result["success"]:
                     st.success(f"[OK] {qty_input} units of '{sku_input}' added to inventory. New total: {kit_result['new_qty']}")
                 else:
                     st.warning(f"[WARN] Kit SKU '{sku_input}' could not be updated.")
-
             else:
                 result = update_inventory_quantity(sku_input, qty_input)
                 if result["success"]:
@@ -80,10 +79,8 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 else:
                     st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
-
 # Pull orders
 orders = get_orders()
-
 filtered_orders = []
 for order in orders:
     payment_date_str = order.get("paymentDate")
@@ -106,16 +103,16 @@ if not filtered_orders:
 
 # Explode orders
 def explode_orders(orders, kits):
-    exploded = defaultdict(lambda: {"total": 0, "from_kits": 0, "standalone": 0})
+    exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
     for order in orders:
         for item in order.get("items", []):
             sku = (item.get("sku") or '').strip().upper()
-            qty = item.get("quantity", 0)
+            qty = float(item.get("quantity", 0))
             if sku in kits:
                 for comp in kits[sku]:
                     key = comp["sku"].strip().upper()
-                    exploded[key]["total"] += qty * comp["qty"]
-                    exploded[key]["from_kits"] += qty * comp["qty"]
+                    exploded[key]["total"] += qty * float(comp["qty"])
+                    exploded[key]["from_kits"] += qty * float(comp["qty"])
                 if sku in inventory_levels:
                     exploded[sku]["total"] += qty
                     exploded[sku]["standalone"] += qty
@@ -130,12 +127,12 @@ sku_totals = explode_orders(filtered_orders, kits)
 all_inventory_rows = []
 for sku in inventory_levels:
     info = inventory_levels.get(sku, {})
-    total_needed = sku_totals.get(sku, {}).get("total", 0)
-    from_kits = sku_totals.get(sku, {}).get("from_kits", 0)
-    standalone = sku_totals.get(sku, {}).get("standalone", 0)
-    stock = info.get("stock", 0)
+    total_needed = sku_totals.get(sku, {}).get("total", 0.0)
+    from_kits = sku_totals.get(sku, {}).get("from_kits", 0.0)
+    standalone = sku_totals.get(sku, {}).get("standalone", 0.0)
+    stock = info.get("stock", 0.0)
     running = stock - total_needed
-    
+
     all_inventory_rows.append({
         "Is Kit": "✅" if sku in kits and sku in inventory_levels else "",
         "SKU": sku,
@@ -144,8 +141,8 @@ for sku in inventory_levels:
         "From Kits": round(from_kits, 2),
         "Standalone Orders": round(standalone, 2),
         "Stock On Hand": round(stock, 2),
-        "Qty Short": round(max(total_needed - stock, 0), 2),
-        "Running Inventory": round(max(running, 0), 2)
+        "Qty Short": round(max(total_needed - stock, 0.0), 2),
+        "Running Inventory": round(max(running, 0.0), 2)
     })
 
 df = pd.DataFrame(all_inventory_rows)
@@ -153,10 +150,11 @@ if df.empty:
     st.warning("No data to display.")
     st.stop()
 
-# Sort and display
-st.dataframe(df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True), use_container_width=True)
+# Display
+df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
+st.dataframe(df, use_container_width=True)
 
-# Download
+# Export
 csv_buffer = io.StringIO()
 df.to_csv(csv_buffer, index=False)
 st.download_button("🗕 Download CSV", csv_buffer.getvalue(), "sku_fulfillment_summary.csv", "text/csv")
