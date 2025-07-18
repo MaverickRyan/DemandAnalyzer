@@ -99,24 +99,23 @@ if __name__ == "__main__":
     sku_map = get_inventory_items()
 
     for sku, info in inv_data.items():
-        norm_sku = sku.strip().upper()
-        stock = info.get("stock", 0)
+    norm_sku = sku.strip().upper()
+    stock = info.get("stock", 0)
 
-        if norm_sku in kits and norm_sku not in sku_map:
-            components = kits[norm_sku]
-            try:
-                stock = min(
-                    int(inv_data.get(comp["sku"].strip().upper(), {}).get("stock", 0) / comp["qty"])
-                    for comp in components if comp["qty"] > 0
-                )
-            except Exception as e:
-                logging.warning(f"⚠️ Error calculating virtual kit {norm_sku}: {e}")
-                continue
+    if norm_sku in kits and norm_sku not in sku_map:
+        components = kits[norm_sku]
+        try:
+            stock = min(inv_data.get(comp["sku"].strip().upper(), {}).get("stock", 0) // comp["qty"] for comp in components)
+        except Exception as e:
+            logging.warning(f"⚠️ Error calculating virtual kit {norm_sku}: {e}")
+            continue
 
-        entry = sku_map.get(norm_sku)
-        if entry:
-            update_inventory_level(norm_sku, entry["inventory_item_id"], stock, name=entry["name"])
-        else:
-            logging.warning(f"⚠️ SKU {norm_sku} not found in Shopify")
+    entry = sku_map.get(norm_sku)
+    if entry:
+        available = int(stock)  # ✅ Floor to nearest integer before sync
+        update_inventory_level(norm_sku, entry["inventory_item_id"], available, name=entry["name"])
+    else:
+        logging.warning(f"⚠️ SKU {norm_sku} not found in Shopify")
+
 
     logging.info("✅ Shopify sync completed")
