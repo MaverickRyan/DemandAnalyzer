@@ -1,5 +1,5 @@
 # -----------------------------
-# 📁 sheet_loader.py (Streamlit-ready)
+# 📁 sheet_loader.py (Streamlit-ready, with float support)
 # -----------------------------
 import gspread
 import json
@@ -18,7 +18,6 @@ def get_gspread_client():
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         else:
             raise KeyError("gspread_key not found in st.secrets")
-
     except Exception:
         # 🧪 Fallback for local scripts like shipstation_sync.py
         with open("gspread_key.json") as f:
@@ -35,7 +34,7 @@ def load_kits_from_sheets():
         kits[row["Kit SKU"].strip()].append({
             "sku": row["Component SKU"].strip(),
             "name": row["Component Name"].strip(),
-            "qty": float(row["Quantity"])  # ✅ Keep fractional values
+            "qty": float(row["Quantity"])  # ensure float
         })
     return dict(kits)
 
@@ -47,7 +46,7 @@ def load_inventory_from_sheets():
     for row in rows:
         sku = row["SKU"].strip().upper()
         inventory[sku] = {
-            "stock": float(row.get("Stock On Hand", 0)),
+            "stock": float(row.get("Stock On Hand", 0)),  # ensure float
             "name": row.get("Product Name", sku).strip()
         }
     return inventory
@@ -58,7 +57,10 @@ def update_inventory_quantity(sku, qty_to_add):
     rows = sheet.get_all_records()
     for idx, row in enumerate(rows, start=2):
         if row["SKU"].strip().upper() == sku.strip().upper():
-            current_qty = float(row.get("Stock On Hand", 0))
+            try:
+                current_qty = float(row.get("Stock On Hand", 0))  # ensure float
+            except:
+                current_qty = 0.0
             new_qty = current_qty + qty_to_add
             sheet.update_cell(idx, 3, new_qty)  # Column C = Stock On Hand
             return {"success": True, "old_qty": current_qty, "new_qty": new_qty}
