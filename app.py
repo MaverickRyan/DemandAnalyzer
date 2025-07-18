@@ -66,6 +66,7 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                 if len(feedback) > 4:
                     st.write(f"...and {len(feedback) - 4} more components.")
 
+                # Finally, update the kit SKU stock level
                 kit_result = update_inventory_quantity(sku_input, qty_input)
                 if kit_result["success"]:
                     st.success(f"[OK] {qty_input} units of '{sku_input}' added to inventory. New total: {kit_result['new_qty']}")
@@ -78,6 +79,7 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
                     st.success(f"✅ {qty_input} units added to {sku_input}. Stock updated from {result['old_qty']} → {result['new_qty']}.")
                 else:
                     st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
 
 # Pull orders
 orders = get_orders()
@@ -108,7 +110,7 @@ def explode_orders(orders, kits):
     for order in orders:
         for item in order.get("items", []):
             sku = (item.get("sku") or '').strip().upper()
-            qty = float(item.get("quantity", 0))
+            qty = item.get("quantity", 0)
             if sku in kits:
                 for comp in kits[sku]:
                     key = comp["sku"].strip().upper()
@@ -143,7 +145,7 @@ for sku in inventory_levels:
         "Standalone Orders": round(standalone, 2),
         "Stock On Hand": round(stock, 2),
         "Qty Short": round(max(total_needed - stock, 0), 2),
-        "Running Inventory": round(running, 2)
+        "Running Inventory": round(max(running, 0), 2)
     })
 
 df = pd.DataFrame(all_inventory_rows)
