@@ -106,24 +106,32 @@ if not filtered_orders:
 
 def explode_orders(orders, kits):
     exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
+
     for order in orders:
         for item in order.get("items", []):
-            sku = (item.get("sku") or '').strip().upper()
+            sku = (item.get("sku") or "").strip().upper()
             qty = item.get("quantity", 0)
 
+            # ✅ Case 1: Kit
             if sku in kits:
                 for comp in kits[sku]:
                     comp_sku = comp["sku"].strip().upper()
-                    comp_qty = float(comp["qty"])
-                    exploded[comp_sku]["total"] += qty * comp_qty
-                    exploded[comp_sku]["from_kits"] += qty * comp_qty
+                    comp_qty = qty * float(comp["qty"])  # 🟢 this supports decimals
+                    exploded[comp_sku]["total"] += comp_qty
+                    exploded[comp_sku]["from_kits"] += comp_qty
+
+                # Still count standalone kit demand
                 if sku in inventory_levels:
                     exploded[sku]["total"] += qty
                     exploded[sku]["standalone"] += qty
+
+            # ✅ Case 2: Normal SKU
             else:
                 exploded[sku]["total"] += qty
                 exploded[sku]["standalone"] += qty
+
     return exploded
+
 
 
 
