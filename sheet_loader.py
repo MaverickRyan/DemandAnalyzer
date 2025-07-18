@@ -35,7 +35,7 @@ def load_kits_from_sheets():
         kits[row["Kit SKU"].strip()].append({
             "sku": row["Component SKU"].strip(),
             "name": row["Component Name"].strip(),
-            "qty": int(row["Quantity"])
+            "qty": float(row["Quantity"])  # ✅ Keep fractional values
         })
     return dict(kits)
 
@@ -47,7 +47,7 @@ def load_inventory_from_sheets():
     for row in rows:
         sku = row["SKU"].strip().upper()
         inventory[sku] = {
-            "stock": int(row.get("Stock On Hand", 0)),
+            "stock": float(row.get("Stock On Hand", 0)),
             "name": row.get("Product Name", sku).strip()
         }
     return inventory
@@ -58,7 +58,7 @@ def update_inventory_quantity(sku, qty_to_add):
     rows = sheet.get_all_records()
     for idx, row in enumerate(rows, start=2):
         if row["SKU"].strip().upper() == sku.strip().upper():
-            current_qty = int(row.get("Stock On Hand", 0))
+            current_qty = float(row.get("Stock On Hand", 0))
             new_qty = current_qty + qty_to_add
             sheet.update_cell(idx, 3, new_qty)  # Column C = Stock On Hand
             return {"success": True, "old_qty": current_qty, "new_qty": new_qty}
