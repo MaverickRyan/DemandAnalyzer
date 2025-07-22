@@ -1,8 +1,8 @@
-# shipstation_sync.py (3-day cutoff, live mode, logging, batch update, retry)
+# shipstation_sync.py (same-day only, live mode, logging, batch update, retry)
 import requests
 import base64
 import sqlite3
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
@@ -32,8 +32,6 @@ if not API_KEY or not API_SECRET:
     raise ValueError("Missing SHIPSTATION_API_KEY or SHIPSTATION_API_SECRET in .env")
 
 DB_PATH = "order_log.db"
-SHIP_CUTOFF_DAYS = 3
-ship_date_cutoff = date.today() - timedelta(days=SHIP_CUTOFF_DAYS)
 
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -80,7 +78,7 @@ def get_shipped_orders():
     all_orders = []
     page = 1
     MAX_PAGES = 100
-    create_date_start = (datetime.today() - timedelta(days=SHIP_CUTOFF_DAYS)).strftime("%Y-%m-%d")
+    create_date_start = date.today().strftime("%Y-%m-%d")
 
     while page <= MAX_PAGES:
         params = {
@@ -126,7 +124,7 @@ def subtract_from_google_sheet(sheet, data, changes: dict):
             logging.warning(f"[WARN] SKU {sku} not found in inventory sheet")
             continue
 
-        old_stock = int(data[row_idx - 2].get("Stock On Hand", 0))
+        old_stock = float(data[row_idx - 2].get("Stock On Hand", 0))
         new_stock = max(old_stock - delta, 0)
 
         updates.append({
@@ -192,8 +190,6 @@ if __name__ == "__main__":
 
         try:
             ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
-            if ship_date < ship_date_cutoff:
-                continue
         except Exception as e:
             logging.warning(f"[WARN] Could not parse ship date for order {order_id}: {e}")
             continue
