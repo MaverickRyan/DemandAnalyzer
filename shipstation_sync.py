@@ -12,6 +12,7 @@ import sys
 import time
 from gspread.exceptions import APIError
 from sheet_loader import load_kits_from_sheets, load_inventory_from_sheets
+from itertools import groupby
 
 # Create logs folder and timestamped log file
 LOG_DIR = "logs"
@@ -131,23 +132,28 @@ def subtract_from_google_sheet(sheet, data, changes: dict):
 
         old_stock = float(data[row_idx - 2].get("Stock On Hand", 0))
         new_stock = max(old_stock - delta, 0)
-        updates.append((row_idx, new_stock))
+        updates.append((row_idx, sku, new_stock))
         logging.info(f"[STOCK] {sku}: {old_stock} → {new_stock} (Δ={delta})")
 
     if not updates:
         logging.info("[STOCK] No valid SKUs to update.")
         return
 
-    updates.sort(key=lambda x: x[0])
-    row_indices = [u[0] for u in updates]
-    values = [[str(u[1])] for u in updates]
-    range_str = f"C{row_indices[0]}:C{row_indices[-1]}"
+    updates.sort()
+    for group_idx, group in groupby(updates, key=lambda x: x[0] // 50):
+        chunk = list(group)
+        start = chunk[0][0]
+        end = chunk[-1][0]
+        values = [[""] for _ in range(start, end + 1)]
 
-    try:
-        sheet.update(range_str, values)
-        logging.info(f"[BATCH] Updated {len(values)} SKUs in range {range_str}")
-    except APIError as e:
-        logging.error(f"[ERROR] GSpread API error during batch update: {e}")
+        for idx, sku, new_value in chunk:
+            values[idx - start] = [str(new_value)]
+
+        try:
+            sheet.update(range_name=f"C{start}:C{end}", values=values)
+            logging.info(f"[BATCH] Updated SKUs in C{start}:C{end}")
+        except APIError as e:
+            logging.error(f"[ERROR] GSpread API error in C{start}:C{end}: {e}")
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
