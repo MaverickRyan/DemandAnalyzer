@@ -15,19 +15,19 @@ from sheet_loader import (
 from streamlit_autorefresh import st_autorefresh
 
 def password_gate():
-    st.title("🔒 Login Required")
-    password = st.text_input("Enter password", type="password")
-    if password == st.secrets["auth"]["password"]:
-        st.session_state["authenticated"] = True
-    elif password:
-        st.error("Incorrect password")
+    st.title("🔒 Secure Dashboard Login")
+    st.markdown("Please enter the access password below:")
 
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
+    with st.form("login_form"):
+        password = st.text_input("🔑 Password", type="password", placeholder="Enter password here...")
+        submitted = st.form_submit_button("🔓 Login")
 
-if not st.session_state["authenticated"]:
-    password_gate()
-    st.stop()
+        if submitted:
+            if password == st.secrets["auth"]["password"]:
+                st.session_state["authenticated"] = True
+                st.experimental_rerun()
+            else:
+                st.error("❌ Incorrect password. Please try again.")
 
 # 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
