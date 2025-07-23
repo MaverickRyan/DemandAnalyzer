@@ -83,16 +83,16 @@ def get_shipped_orders():
     all_orders = []
     page = 1
     MAX_PAGES = 100
-    create_date_start = date.today().strftime("%Y-%m-%d")
+    ship_date_start = date.today().strftime("%Y-%m-%d")
 
     while page <= MAX_PAGES:
         params = {
             'pageSize': 500,
             'page': page,
-            'sortBy': 'createDate',
+            'sortBy': 'shipDate',
             'sortDir': 'DESC',
             'orderStatus': 'shipped',
-            'createDateStart': create_date_start
+            'shipDateStart': ship_date_start
         }
 
         try:
