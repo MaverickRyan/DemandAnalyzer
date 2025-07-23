@@ -1,4 +1,3 @@
-# shipstation_sync.py (same-day only, live mode, logging, batch update, retry)
 import requests
 import base64
 import sqlite3
@@ -14,11 +13,17 @@ import time
 from gspread.exceptions import APIError
 from sheet_loader import load_kits_from_sheets, load_inventory_from_sheets
 
+# Create logs folder and timestamped log file
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+log_filename = datetime.now().strftime("shipstation_sync_%Y-%m-%d_%H-%M-%S.log")
+log_path = os.path.join(LOG_DIR, log_filename)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
     handlers=[
-        logging.FileHandler("shipstation_sync.log", encoding="utf-8"),
+        logging.FileHandler(log_path, encoding="utf-8"),
         logging.StreamHandler(sys.stdout)
     ],
     force=True
