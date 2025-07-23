@@ -30,14 +30,14 @@ def password_gate():
             if password == st.secrets["auth"]["password"]:
                 st.session_state["authenticated"] = True
                 st.session_state["auth_time"] = time.time()
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("❌ Incorrect password. Please try again.")
 
 def logout():
     st.session_state["authenticated"] = False
     st.session_state["auth_time"] = 0
-    st.experimental_rerun()
+    st.rerun()
 
 # === Handle Timeout ===
 now = time.time()
