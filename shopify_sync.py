@@ -12,10 +12,14 @@ from sheet_loader import (
 )
 
 # --- Setup ---
+os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
-    handlers=[logging.StreamHandler()]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("logs/shopify_sync.log", encoding="utf-8")
+    ]
 )
 
 load_dotenv()
@@ -119,7 +123,7 @@ if __name__ == "__main__":
             stock = info.get("stock", 0)
 
             # --- Virtual Kit Logic ---
-            if norm_sku in kits and norm_sku not in sku_map:
+            if norm_sku in kits and norm_sku not in inv_data:
                 components = kits[norm_sku]
                 try:
                     component_stocks = []
