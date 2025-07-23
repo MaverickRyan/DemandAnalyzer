@@ -114,13 +114,16 @@ if __name__ == "__main__":
     kits = load_kits_from_sheets()
     inflated_skus_store2 = load_inflation_rules()
 
+    all_skus = set(inv_data.keys()) | set(kits.keys())
+    logging.info(f"🧮 Processing {len(all_skus)} total SKUs")
+
     for store in STORES:
         logging.info(f"🔗 Syncing with {store['name']}")
         sku_map = get_inventory_items(store)
 
-        for sku, info in inv_data.items():
+        for sku in all_skus:
             norm_sku = sku.strip().upper()
-            stock = info.get("stock", 0)
+            stock = inv_data.get(norm_sku, {}).get("stock", 0)
 
             if norm_sku in kits:
                 logging.debug(f"🧪 {norm_sku} is in kits")
@@ -182,6 +185,6 @@ if __name__ == "__main__":
             else:
                 logging.warning(f"⚠️ SKU {norm_sku} not found in {store['name']}")
 
-    logging.info(f"✔️ Total SKUs processed: {len(inv_data)}")
+    logging.info(f"✔️ Total SKUs processed: {len(all_skus)}")
     logging.info(f"✔️ Total kits detected: {len(kits)}")
     logging.info("✅ Shopify sync completed")
