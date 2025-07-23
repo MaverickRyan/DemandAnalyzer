@@ -4,6 +4,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import time
 from datetime import datetime, timedelta
 from collections import defaultdict
 from shipstation import get_orders
@@ -14,20 +15,46 @@ from sheet_loader import (
 )
 from streamlit_autorefresh import st_autorefresh
 
+# === Session Settings ===
+SESSION_TIMEOUT = 60 * 60  # 1 hour in seconds
+
 def password_gate():
     st.title("🔒 Secure Dashboard Login")
-    st.markdown("Please enter the access password below:")
+    st.markdown("Please enter the access password to continue:")
 
     with st.form("login_form"):
-        password = st.text_input("🔑 Password", type="password", placeholder="Enter password here...")
+        password = st.text_input("🔑 Password", type="password", placeholder="Enter password...")
         submitted = st.form_submit_button("🔓 Login")
 
         if submitted:
             if password == st.secrets["auth"]["password"]:
                 st.session_state["authenticated"] = True
+                st.session_state["auth_time"] = time.time()
                 st.experimental_rerun()
             else:
                 st.error("❌ Incorrect password. Please try again.")
+
+def logout():
+    st.session_state["authenticated"] = False
+    st.session_state["auth_time"] = 0
+    st.experimental_rerun()
+
+# === Handle Timeout ===
+now = time.time()
+auth_time = st.session_state.get("auth_time", 0)
+session_age = now - auth_time
+
+# Require re-login if timeout reached or not authenticated
+if not st.session_state.get("authenticated", False) or session_age > SESSION_TIMEOUT:
+    st.session_state["authenticated"] = False
+    password_gate()
+    st.stop()
+
+# === Show logout button in sidebar once logged in ===
+with st.sidebar:
+    if st.session_state.get("authenticated", False):
+        if st.button("🚪 Logout"):
+            logout()
 
 # 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
