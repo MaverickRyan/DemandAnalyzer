@@ -71,3 +71,18 @@ def update_inventory_quantity(sku, qty_to_add):
             sheet.update_cell(idx, 3, new_qty)  # Column C = Stock On Hand
             return {"success": True, "old_qty": current_qty, "new_qty": new_qty}
     return {"success": False}
+
+def load_inflation_rules():
+    client = get_gspread_client()
+    try:
+        sheet = client.open("Kit BOMs").worksheet("inflation_rules")
+        rows = sheet.get_all_records()
+        store2_inflated = set(
+            row["SKU"].strip().upper()
+            for row in rows
+            if str(row.get("Store2 Inflate", "")).strip().upper() == "TRUE"
+        )
+        return store2_inflated
+    except Exception as e:
+        print(f"[ERROR] Could not load inflation rules: {e}")
+        return set()
