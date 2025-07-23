@@ -83,16 +83,16 @@ def get_shipped_orders():
     all_orders = []
     page = 1
     MAX_PAGES = 100
-    ship_date_start = date.today().strftime("%Y-%m-%d")
+    modify_date_start = date.today().strftime("%Y-%m-%d")
 
     while page <= MAX_PAGES:
         params = {
             'pageSize': 500,
             'page': page,
-            'sortBy': 'shipDate',
+            'sortBy': 'modifyDate',
             'sortDir': 'DESC',
             'orderStatus': 'shipped',
-            'shipDateStart': ship_date_start
+            'modifyDateStart': modify_date_start
         }
 
         try:
@@ -186,6 +186,10 @@ if __name__ == "__main__":
             ship_date = datetime.strptime(ship_date_raw.split("T")[0], "%Y-%m-%d").date()
         except Exception as e:
             logging.warning(f"[WARN] Could not parse ship date for order {order_id}: {e}")
+            continue
+
+        if ship_date != date.today():
+            logging.info(f"⏭️ Skipping order {order_id}, shipped on {ship_date} (not today)")
             continue
 
         if is_order_processed(conn, order_id):
