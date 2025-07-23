@@ -41,7 +41,7 @@ for n in ["", "_STORE2"]:
         })
 
 if not STORES:
-    logging.error("❌ No valid Shopify store credentials found in .env")
+    logging.error("[ERROR] No valid Shopify store credentials found in .env")
     sys.exit(1)
 
 # --- Helpers ---
@@ -102,9 +102,9 @@ def update_inventory_level(store, sku, inventory_item_id, available, name=None):
     }
     response = requests.post(endpoint, headers=headers, json=payload)
     if response.status_code == 200:
-        logging.info(f"✅ Updated {label} to {available} on {store['name']}")
+        logging.info(f"[OK] Updated {label} to {available} on {store['name']}")
     else:
-        logging.error(f"❌ Failed to update {label} on {store['name']}: {response.text}")
+        logging.error(f"[ERROR] Failed to update {label} on {store['name']}: {response.text}")
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -115,10 +115,10 @@ if __name__ == "__main__":
     inflated_skus_store2 = load_inflation_rules()
 
     all_skus = set(inv_data.keys()) | set(kits.keys())
-    logging.info(f"🧮 Processing {len(all_skus)} total SKUs")
+    logging.info(f"[CALC] Processing {len(all_skus)} total SKUs")
 
     for store in STORES:
-        logging.info(f"🔗 Syncing with {store['name']}")
+        logging.info(f"[STORE SYNC] Syncing with {store['name']}")
         sku_map = get_inventory_items(store)
 
         for sku in all_skus:
@@ -126,13 +126,13 @@ if __name__ == "__main__":
             stock = inv_data.get(norm_sku, {}).get("stock", 0)
 
             if norm_sku in kits:
-                logging.debug(f"🧪 {norm_sku} is in kits")
+                logging.debug(f"[DEBUG] {norm_sku} is in kits")
                 if norm_sku not in inv_data:
-                    logging.debug(f"🧪 {norm_sku} is not in inventory (candidate for virtual kit)")
+                    logging.debug(f"[DEBUG] {norm_sku} is not in inventory (candidate for virtual kit)")
 
             # --- Virtual Kit Logic ---
             if norm_sku in kits and norm_sku not in inv_data:
-                logging.info(f"🔍 Virtual kit condition met for {norm_sku}")
+                logging.info(f"[INFO] Virtual kit condition met for {norm_sku}")
                 components = kits[norm_sku]
                 try:
                     component_stocks = []
@@ -144,11 +144,11 @@ if __name__ == "__main__":
                         stock_qty = inv_data.get(comp_sku, {}).get("stock", 0)
 
                         if qty_per_kit <= 0:
-                            logging.warning(f"⚠️ Invalid quantity in kit: {norm_sku} requires {qty_per_kit} of {comp_sku}")
+                            logging.warning(f"[WARN] Invalid quantity in kit: {norm_sku} requires {qty_per_kit} of {comp_sku}")
                             continue
 
                         if stock_qty is None:
-                            logging.warning(f"⚠️ Missing stock data for component {comp_sku} in kit {norm_sku}")
+                            logging.warning(f"[WARN] Missing stock data for component {comp_sku} in kit {norm_sku}")
                             stock_qty = 0
 
                         calculated_quantity = stock_qty // qty_per_kit
@@ -156,35 +156,35 @@ if __name__ == "__main__":
                         calculated_quantities.append(calculated_quantity)
 
                     if not calculated_quantities:
-                        logging.warning(f"⚠️ No valid components for virtual kit {norm_sku}. Skipping.")
+                        logging.warning(f"[WARN] No valid components for virtual kit {norm_sku}. Skipping.")
                         continue
 
                     stock = min(calculated_quantities)
                     breakdown = ", ".join(f"{sku}: {stock_qty}/{qty_per_kit} → {possible}" 
                                           for sku, stock_qty, qty_per_kit, possible in component_stocks)
-                    logging.info(f"🔍 Entered virtual kit block for {norm_sku}")
+                    logging.info(f"[DETAIL] Entered virtual kit block for {norm_sku}")
                     logging.info(f"[KIT CALC] {norm_sku}: available = {stock} (based on: {breakdown})")
                 except Exception as e:
-                    logging.warning(f"⚠️ Error calculating virtual kit {norm_sku}: {e}")
+                    logging.warning(f"[WARN] Error calculating virtual kit {norm_sku}: {e}")
                     continue
 
                 # Inflate virtual kits for Store2
                 if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
                     stock += 1000
-                    logging.info(f"🎈 Inflated virtual kit {norm_sku} for Store2 by +1000 → {stock}")
+                    logging.info(f"[INFLATED] Virtual kit {norm_sku} for Store2 by +1000 → {stock}")
 
             # --- Inflate standalone SKUs ---
             if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
                 stock += 1000
-                logging.info(f"🎈 Inflated standalone SKU {norm_sku} for Store2 by +1000 → {stock}")
+                logging.info(f"[INFLATED] Standalone SKU {norm_sku} for Store2 by +1000 → {stock}")
 
             entry = sku_map.get(norm_sku)
             if entry:
                 available = int(stock)  # Floor to int
                 update_inventory_level(store, norm_sku, entry["inventory_item_id"], available, name=entry["name"])
             else:
-                logging.warning(f"⚠️ SKU {norm_sku} not found in {store['name']}")
+                logging.warning(f"[WARN] SKU {norm_sku} not found in {store['name']}")
 
-    logging.info(f"✔️ Total SKUs processed: {len(all_skus)}")
-    logging.info(f"✔️ Total kits detected: {len(kits)}")
-    logging.info("✅ Shopify sync completed")
+    logging.info(f"[SUMMARY] Total SKUs processed: {len(all_skus)}")
+    logging.info(f"[SUMMARY] Total kits detected: {len(kits)}")
+    logging.info("[COMPLETE] Shopify sync finished")
