@@ -12,7 +12,6 @@ import sys
 import time
 from gspread.exceptions import APIError
 from sheet_loader import load_kits_from_sheets, load_inventory_from_sheets
-from itertools import groupby
 
 # Create logs folder and timestamped log file
 LOG_DIR = "logs"
@@ -122,7 +121,7 @@ def get_shipped_orders():
 
 def subtract_from_google_sheet(sheet, data, changes: dict):
     sku_to_row = {row["SKU"].strip().upper(): idx + 2 for idx, row in enumerate(data)}
-    updates = []
+    batch_updates = []
 
     for sku, delta in changes.items():
         row_idx = sku_to_row.get(sku)
@@ -132,28 +131,22 @@ def subtract_from_google_sheet(sheet, data, changes: dict):
 
         old_stock = float(data[row_idx - 2].get("Stock On Hand", 0))
         new_stock = max(old_stock - delta, 0)
-        updates.append((row_idx, sku, new_stock))
+
+        batch_updates.append({
+            "range": f"C{row_idx}",
+            "values": [[str(new_stock)]]
+        })
         logging.info(f"[STOCK] {sku}: {old_stock} → {new_stock} (Δ={delta})")
 
-    if not updates:
+    if not batch_updates:
         logging.info("[STOCK] No valid SKUs to update.")
         return
 
-    updates.sort()
-    for group_idx, group in groupby(updates, key=lambda x: x[0] // 50):
-        chunk = list(group)
-        start = chunk[0][0]
-        end = chunk[-1][0]
-        values = [[""] for _ in range(start, end + 1)]
-
-        for idx, sku, new_value in chunk:
-            values[idx - start] = [str(new_value)]
-
-        try:
-            sheet.update(range_name=f"C{start}:C{end}", values=values)
-            logging.info(f"[BATCH] Updated SKUs in C{start}:C{end}")
-        except APIError as e:
-            logging.error(f"[ERROR] GSpread API error in C{start}:C{end}: {e}")
+    try:
+        sheet.batch_update(batch_updates)
+        logging.info(f"[BATCH] Successfully updated {len(batch_updates)} SKU(s)")
+    except APIError as e:
+        logging.error(f"[ERROR] GSpread API error during batch update: {e}")
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
