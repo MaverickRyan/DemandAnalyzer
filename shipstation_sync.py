@@ -120,8 +120,8 @@ def get_shipped_orders():
     return all_orders
 
 def subtract_from_google_sheet(sheet, data, changes: dict):
-    updates = []
     sku_to_row = {row["SKU"].strip().upper(): idx + 2 for idx, row in enumerate(data)}
+    updates = []
 
     for sku, delta in changes.items():
         row_idx = sku_to_row.get(sku)
@@ -131,35 +131,23 @@ def subtract_from_google_sheet(sheet, data, changes: dict):
 
         old_stock = float(data[row_idx - 2].get("Stock On Hand", 0))
         new_stock = max(old_stock - delta, 0)
-
-        updates.append({
-            "range": f"C{row_idx}",
-            "values": [[str(new_stock)]]
-        })
+        updates.append((row_idx, new_stock))
         logging.info(f"[STOCK] {sku}: {old_stock} → {new_stock} (Δ={delta})")
 
     if not updates:
         logging.info("[STOCK] No valid SKUs to update.")
         return
 
-    chunk_size = 50
-    for i in range(0, len(updates), chunk_size):
-        chunk = updates[i:i + chunk_size]
-        retry = 0
-        while retry < 5:
-            try:
-                sheet.batch_update([{"range": u["range"], "values": u["values"]} for u in chunk])
-                logging.info(f"[BATCH] Updated {len(chunk)} SKU(s) via batch_update.")
-                break
-            except APIError as e:
-                if "429" in str(e):
-                    wait_time = 2 ** retry
-                    logging.warning(f"[RETRY] Quota exceeded. Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                    retry += 1
-                else:
-                    logging.error(f"[ERROR] GSpread API error: {e}")
-                    break
+    updates.sort(key=lambda x: x[0])
+    row_indices = [u[0] for u in updates]
+    values = [[str(u[1])] for u in updates]
+    range_str = f"C{row_indices[0]}:C{row_indices[-1]}"
+
+    try:
+        sheet.update(range_str, values)
+        logging.info(f"[BATCH] Updated {len(values)} SKUs in range {range_str}")
+    except APIError as e:
+        logging.error(f"[ERROR] GSpread API error during batch update: {e}")
 
 # 🚀 MAIN EXECUTION
 if __name__ == "__main__":
@@ -185,6 +173,8 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[ERR] Setup failed: {e}")
         sys.exit(1)
+
+    all_sku_changes = {}
 
     for order in orders:
         order_id = str(order.get("orderId"))
@@ -223,8 +213,11 @@ if __name__ == "__main__":
             else:
                 sku_changes[sku] = sku_changes.get(sku, 0) + qty
 
-        subtract_from_google_sheet(sheet, sheet_data, sku_changes)
+        for sku, delta in sku_changes.items():
+            all_sku_changes[sku] = all_sku_changes.get(sku, 0) + delta
+
         log_processed_order(conn, order_id, sku_changes)
 
+    subtract_from_google_sheet(sheet, sheet_data, all_sku_changes)
     conn.close()
     logging.info("✅ ShipStation Sync Completed")
