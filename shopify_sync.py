@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from sheet_loader import (
     load_inventory_from_sheets,
     load_kits_from_sheets,
-    load_inflation_rules  # NEW import
+    load_inflation_rules
 )
 
 # --- Setup ---
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     inv_data = load_inventory_from_sheets()
     kits = load_kits_from_sheets()
-    inflated_skus_store2 = load_inflation_rules()  # NEW
+    inflated_skus_store2 = load_inflation_rules()
 
     for store in STORES:
         logging.info(f"🔗 Syncing with {store['name']}")
@@ -118,14 +118,38 @@ if __name__ == "__main__":
             norm_sku = sku.strip().upper()
             stock = info.get("stock", 0)
 
-            # Virtual Kit logic
+            # --- Virtual Kit Logic ---
             if norm_sku in kits and norm_sku not in sku_map:
                 components = kits[norm_sku]
                 try:
-                    stock = min(
-                        inv_data.get(comp["sku"].strip().upper(), {}).get("stock", 0) // comp["qty"]
-                        for comp in components
-                    )
+                    component_stocks = []
+                    calculated_quantities = []
+
+                    for comp in components:
+                        comp_sku = comp["sku"].strip().upper()
+                        qty_per_kit = comp["qty"]
+                        stock_qty = inv_data.get(comp_sku, {}).get("stock", 0)
+
+                        if qty_per_kit <= 0:
+                            logging.warning(f"⚠️ Invalid quantity in kit: {norm_sku} requires {qty_per_kit} of {comp_sku}")
+                            continue
+
+                        if stock_qty is None:
+                            logging.warning(f"⚠️ Missing stock data for component {comp_sku} in kit {norm_sku}")
+                            stock_qty = 0
+
+                        calculated_quantity = stock_qty // qty_per_kit
+                        component_stocks.append((comp_sku, stock_qty, qty_per_kit, calculated_quantity))
+                        calculated_quantities.append(calculated_quantity)
+
+                    if not calculated_quantities:
+                        logging.warning(f"⚠️ No valid components for virtual kit {norm_sku}. Skipping.")
+                        continue
+
+                    stock = min(calculated_quantities)
+                    breakdown = ", ".join(f"{sku}: {stock_qty}/{qty_per_kit} → {possible}" 
+                                          for sku, stock_qty, qty_per_kit, possible in component_stocks)
+                    logging.info(f"[KIT CALC] {norm_sku}: available = {stock} (based on: {breakdown})")
                 except Exception as e:
                     logging.warning(f"⚠️ Error calculating virtual kit {norm_sku}: {e}")
                     continue
@@ -135,14 +159,14 @@ if __name__ == "__main__":
                     stock += 1000
                     logging.info(f"🎈 Inflated virtual kit {norm_sku} for Store2 by +1000 → {stock}")
 
-            # Inflate standalone SKUs for Store2
+            # --- Inflate standalone SKUs ---
             if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
                 stock += 1000
                 logging.info(f"🎈 Inflated standalone SKU {norm_sku} for Store2 by +1000 → {stock}")
 
             entry = sku_map.get(norm_sku)
             if entry:
-                available = int(stock)  # Floor
+                available = int(stock)  # Floor to int
                 update_inventory_level(store, norm_sku, entry["inventory_item_id"], available, name=entry["name"])
             else:
                 logging.warning(f"⚠️ SKU {norm_sku} not found in {store['name']}")
