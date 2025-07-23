@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 
 # === Settings ===
 DB_PATH = "order_log.db"
-LOG_DIR = "."  # current directory
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
 DAYS_TO_KEEP = 60
 
 # === Logging Setup ===
@@ -16,7 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     handlers=[
-        logging.FileHandler("combined_sync.log", encoding="utf-8"),
+        logging.FileHandler(os.path.join(LOG_DIR, "combined_sync.log"), encoding="utf-8"),
         logging.StreamHandler(sys.stdout)
     ]
 )
