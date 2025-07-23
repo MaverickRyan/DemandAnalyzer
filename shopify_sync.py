@@ -108,7 +108,7 @@ def update_inventory_level(store, sku, inventory_item_id, available, name=None):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    logging.info("🚀 Starting Shopify Inventory Sync" + (" [DRY-RUN]" if DRY_RUN else ""))
+    logging.info("[START] Shopify Inventory Sync" + (" [DRY-RUN]" if DRY_RUN else ""))
 
     inv_data = load_inventory_from_sheets()
     kits = load_kits_from_sheets()
