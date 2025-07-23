@@ -1,4 +1,3 @@
-# run_sync_and_cleanup.py
 import logging
 import subprocess
 import sys
@@ -9,15 +8,18 @@ from datetime import datetime, timedelta
 # === Settings ===
 DB_PATH = "order_log.db"
 LOG_DIR = "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
 DAYS_TO_KEEP = 60
 
 # === Logging Setup ===
+os.makedirs(LOG_DIR, exist_ok=True)
+log_filename = datetime.now().strftime("combined_sync_%Y-%m-%d_%H-%M-%S.log")
+log_path = os.path.join(LOG_DIR, log_filename)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     handlers=[
-        logging.FileHandler(os.path.join(LOG_DIR, "combined_sync.log"), encoding="utf-8"),
+        logging.FileHandler(log_path, encoding="utf-8"),
         logging.StreamHandler(sys.stdout)
     ]
 )
