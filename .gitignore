@@ -1,3 +1,6 @@
 .env
 gspread_key.json
 __pycache__/
+# Ignore log files
+logs/
+*.log
