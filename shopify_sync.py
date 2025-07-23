@@ -122,8 +122,14 @@ if __name__ == "__main__":
             norm_sku = sku.strip().upper()
             stock = info.get("stock", 0)
 
+            if norm_sku in kits:
+                logging.debug(f"🧪 {norm_sku} is in kits")
+                if norm_sku not in inv_data:
+                    logging.debug(f"🧪 {norm_sku} is not in inventory (candidate for virtual kit)")
+
             # --- Virtual Kit Logic ---
             if norm_sku in kits and norm_sku not in inv_data:
+                logging.info(f"🔍 Virtual kit condition met for {norm_sku}")
                 components = kits[norm_sku]
                 try:
                     component_stocks = []
