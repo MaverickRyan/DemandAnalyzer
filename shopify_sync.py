@@ -153,6 +153,7 @@ if __name__ == "__main__":
                     stock = min(calculated_quantities)
                     breakdown = ", ".join(f"{sku}: {stock_qty}/{qty_per_kit} → {possible}" 
                                           for sku, stock_qty, qty_per_kit, possible in component_stocks)
+                    logging.info(f"🔍 Entered virtual kit block for {norm_sku}")
                     logging.info(f"[KIT CALC] {norm_sku}: available = {stock} (based on: {breakdown})")
                 except Exception as e:
                     logging.warning(f"⚠️ Error calculating virtual kit {norm_sku}: {e}")
@@ -175,4 +176,6 @@ if __name__ == "__main__":
             else:
                 logging.warning(f"⚠️ SKU {norm_sku} not found in {store['name']}")
 
+    logging.info(f"✔️ Total SKUs processed: {len(inv_data)}")
+    logging.info(f"✔️ Total kits detected: {len(kits)}")
     logging.info("✅ Shopify sync completed")
