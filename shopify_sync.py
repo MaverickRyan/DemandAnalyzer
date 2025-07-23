@@ -1,4 +1,3 @@
-# shopify_sync.py (multi-store sync, dry-run, virtual kits, flooring)
 import os
 import time
 import json
@@ -6,7 +5,11 @@ import logging
 import requests
 import sys
 from dotenv import load_dotenv
-from sheet_loader import load_inventory_from_sheets, load_kits_from_sheets
+from sheet_loader import (
+    load_inventory_from_sheets,
+    load_kits_from_sheets,
+    load_inflation_rules  # NEW import
+)
 
 # --- Setup ---
 logging.basicConfig(
@@ -105,6 +108,7 @@ if __name__ == "__main__":
 
     inv_data = load_inventory_from_sheets()
     kits = load_kits_from_sheets()
+    inflated_skus_store2 = load_inflation_rules()  # NEW
 
     for store in STORES:
         logging.info(f"🔗 Syncing with {store['name']}")
@@ -114,13 +118,27 @@ if __name__ == "__main__":
             norm_sku = sku.strip().upper()
             stock = info.get("stock", 0)
 
+            # Virtual Kit logic
             if norm_sku in kits and norm_sku not in sku_map:
                 components = kits[norm_sku]
                 try:
-                    stock = min(inv_data.get(comp["sku"].strip().upper(), {}).get("stock", 0) // comp["qty"] for comp in components)
+                    stock = min(
+                        inv_data.get(comp["sku"].strip().upper(), {}).get("stock", 0) // comp["qty"]
+                        for comp in components
+                    )
                 except Exception as e:
                     logging.warning(f"⚠️ Error calculating virtual kit {norm_sku}: {e}")
                     continue
+
+                # Inflate virtual kits for Store2
+                if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
+                    stock += 1000
+                    logging.info(f"🎈 Inflated virtual kit {norm_sku} for Store2 by +1000 → {stock}")
+
+            # Inflate standalone SKUs for Store2
+            if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
+                stock += 1000
+                logging.info(f"🎈 Inflated standalone SKU {norm_sku} for Store2 by +1000 → {stock}")
 
             entry = sku_map.get(norm_sku)
             if entry:
