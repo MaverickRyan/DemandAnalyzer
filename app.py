@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Final Clean Version with All Features + Kit Checker)
+# 📁 app.py (Final Clean Version with All Features + Kit Checker with Component Names)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -59,6 +59,7 @@ with st.sidebar:
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
 kits = load_kits_from_sheets()
+inventory = load_inventory_from_sheets()
 
 # Sidebar filter
 st.sidebar.header("🗓️ Filter Orders by Date")
@@ -79,13 +80,19 @@ kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
 if kit_sku:
     if kit_sku in kits:
         st.sidebar.success(f"{kit_sku} is a kit. Components:")
-        comp_data = pd.DataFrame(kits[kit_sku])
-        comp_data.columns = ["Component SKU", "Quantity"]
+        components = kits[kit_sku]
+        rows = []
+        for comp in components:
+            comp_sku = comp.get("sku", "").strip().upper()
+            qty = comp.get("qty", "")
+            name = inventory.get(comp_sku, {}).get("name", "")
+            rows.append({"Component SKU": comp_sku, "Quantity": qty, "Name": name})
+        comp_data = pd.DataFrame(rows)
         st.sidebar.dataframe(comp_data)
     else:
         st.sidebar.info(f"{kit_sku} is not a kit.")
 
-inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
+inventory_levels = st.session_state.get("inventory", inventory)
 
 # Title
 st.title("📦 Fulfillment & Production Dashboard")
