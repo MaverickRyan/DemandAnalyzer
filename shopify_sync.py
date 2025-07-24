@@ -5,6 +5,7 @@ import logging
 import requests
 import sys
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 from sheet_loader import (
     load_inventory_from_sheets,
     load_kits_from_sheets,
@@ -104,27 +105,32 @@ def update_inventory_level(store, sku, inventory_item_id, available, name=None):
     max_retries = 5
     retry = 0
     while retry < max_retries:
-        response = requests.post(endpoint, headers=headers, json=payload)
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload)
 
-        # Respect API usage header to avoid hitting 429
-        call_limit = response.headers.get("X-Shopify-Shop-Api-Call-Limit")
-        if call_limit:
-            used, total = map(int, call_limit.split("/"))
-            if used >= total - 5:
-                logging.info(f"[WAIT] API usage {used}/{total}. Sleeping 1s to avoid throttle...")
-                time.sleep(1)
+            call_limit = response.headers.get("X-Shopify-Shop-Api-Call-Limit")
+            if call_limit:
+                used, total = map(int, call_limit.split("/"))
+                if used >= total - 5:
+                    logging.info(f"[WAIT] API usage {used}/{total}. Sleeping 1s to avoid throttle...")
+                    time.sleep(1)
 
-        if response.status_code == 200:
-            logging.info(f"[OK] Updated {label} to {available} on {store['name']}")
-            return
-        elif response.status_code == 429:
+            if response.status_code == 200:
+                logging.info(f"[OK] Updated {label} to {available} on {store['name']}")
+                return
+            elif response.status_code == 429:
+                wait_time = 2 ** retry
+                logging.warning(f"[RETRY] Rate limit hit for {label}. Waiting {wait_time}s before retry {retry + 1}/{max_retries}...")
+                time.sleep(wait_time)
+                retry += 1
+            else:
+                logging.error(f"[ERROR] Failed to update {label} on {store['name']}: {response.text}")
+                return
+        except RequestException as e:
             wait_time = 2 ** retry
-            logging.warning(f"[RETRY] Rate limit hit for {label}. Waiting {wait_time}s before retry {retry + 1}/{max_retries}...")
+            logging.error(f"[FATAL] Network error updating {label} on {store['name']} (retry {retry + 1}/{max_retries}): {e}")
             time.sleep(wait_time)
             retry += 1
-        else:
-            logging.error(f"[ERROR] Failed to update {label} on {store['name']}: {response.text}")
-            return
 
     logging.error(f"[ERROR] Exhausted retries for {label} on {store['name']}")
 
@@ -140,72 +146,66 @@ if __name__ == "__main__":
     logging.info(f"[CALC] Processing {len(all_skus)} total SKUs")
 
     for store in STORES:
-        logging.info(f"[STORE SYNC] Syncing with {store['name']}")
-        sku_map = get_inventory_items(store)
+        try:
+            logging.info(f"[STORE SYNC] Syncing with {store['name']}")
+            sku_map = get_inventory_items(store)
 
-        for sku in all_skus:
-            norm_sku = sku.strip().upper()
-            stock = inv_data.get(norm_sku, {}).get("stock", 0)
+            for sku in all_skus:
+                norm_sku = sku.strip().upper()
+                stock = inv_data.get(norm_sku, {}).get("stock", 0)
 
-            if norm_sku in kits:
-                logging.debug(f"[DEBUG] {norm_sku} is in kits")
-                if norm_sku not in inv_data:
-                    logging.debug(f"[DEBUG] {norm_sku} is not in inventory (candidate for virtual kit)")
+                if norm_sku in kits and norm_sku not in inv_data:
+                    components = kits[norm_sku]
+                    try:
+                        component_stocks = []
+                        calculated_quantities = []
 
-            # --- Virtual Kit Logic ---
-            if norm_sku in kits and norm_sku not in inv_data:
-                logging.info(f"[INFO] Virtual kit condition met for {norm_sku}")
-                components = kits[norm_sku]
-                try:
-                    component_stocks = []
-                    calculated_quantities = []
+                        for comp in components:
+                            comp_sku = comp["sku"].strip().upper()
+                            qty_per_kit = comp["qty"]
+                            stock_qty = inv_data.get(comp_sku, {}).get("stock", 0)
 
-                    for comp in components:
-                        comp_sku = comp["sku"].strip().upper()
-                        qty_per_kit = comp["qty"]
-                        stock_qty = inv_data.get(comp_sku, {}).get("stock", 0)
+                            if qty_per_kit <= 0:
+                                logging.warning(f"[WARN] Invalid quantity in kit: {norm_sku} requires {qty_per_kit} of {comp_sku}")
+                                continue
 
-                        if qty_per_kit <= 0:
-                            logging.warning(f"[WARN] Invalid quantity in kit: {norm_sku} requires {qty_per_kit} of {comp_sku}")
+                            if stock_qty is None:
+                                logging.warning(f"[WARN] Missing stock data for component {comp_sku} in kit {norm_sku}")
+                                stock_qty = 0
+
+                            calculated_quantity = stock_qty // qty_per_kit
+                            component_stocks.append((comp_sku, stock_qty, qty_per_kit, calculated_quantity))
+                            calculated_quantities.append(calculated_quantity)
+
+                        if not calculated_quantities:
+                            logging.warning(f"[WARN] No valid components for virtual kit {norm_sku}. Skipping.")
                             continue
 
-                        if stock_qty is None:
-                            logging.warning(f"[WARN] Missing stock data for component {comp_sku} in kit {norm_sku}")
-                            stock_qty = 0
-
-                        calculated_quantity = stock_qty // qty_per_kit
-                        component_stocks.append((comp_sku, stock_qty, qty_per_kit, calculated_quantity))
-                        calculated_quantities.append(calculated_quantity)
-
-                    if not calculated_quantities:
-                        logging.warning(f"[WARN] No valid components for virtual kit {norm_sku}. Skipping.")
+                        stock = min(calculated_quantities)
+                        breakdown = ", ".join(f"{sku}: {stock_qty}/{qty_per_kit} → {possible}" 
+                                              for sku, stock_qty, qty_per_kit, possible in component_stocks)
+                        logging.info(f"[KIT CALC] {norm_sku}: available = {stock} (based on: {breakdown})")
+                    except Exception as e:
+                        logging.warning(f"[WARN] Error calculating virtual kit {norm_sku}: {e}")
                         continue
 
-                    stock = min(calculated_quantities)
-                    breakdown = ", ".join(f"{sku}: {stock_qty}/{qty_per_kit} → {possible}" 
-                                          for sku, stock_qty, qty_per_kit, possible in component_stocks)
-                    logging.info(f"[DETAIL] Entered virtual kit block for {norm_sku}")
-                    logging.info(f"[KIT CALC] {norm_sku}: available = {stock} (based on: {breakdown})")
-                except Exception as e:
-                    logging.warning(f"[WARN] Error calculating virtual kit {norm_sku}: {e}")
-                    continue
+                    if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
+                        stock += 1000
+                        logging.info(f"[INFLATED] Virtual kit {norm_sku} for Store2 by +1000 → {stock}")
 
-                # Inflate virtual kits for Store2
                 if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
                     stock += 1000
-                    logging.info(f"[INFLATED] Virtual kit {norm_sku} for Store2 by +1000 → {stock}")
+                    logging.info(f"[INFLATED] Standalone SKU {norm_sku} for Store2 by +1000 → {stock}")
 
-            # --- Inflate standalone SKUs ---
-            if store['name'] == "Store2" and norm_sku in inflated_skus_store2:
-                stock += 1000
-                logging.info(f"[INFLATED] Standalone SKU {norm_sku} for Store2 by +1000 → {stock}")
+                entry = sku_map.get(norm_sku)
+                if entry:
+                    available = int(stock)
+                    update_inventory_level(store, norm_sku, entry["inventory_item_id"], available, name=entry["name"])
+                else:
+                    logging.warning(f"[WARN] SKU {norm_sku} not found in {store['name']}")
 
-            entry = sku_map.get(norm_sku)
-            if entry:
-                available = int(stock)  # Floor to int
-                update_inventory_level(store, norm_sku, entry["inventory_item_id"], available, name=entry["name"])
-            else:
-                logging.warning(f"[WARN] SKU {norm_sku} not found in {store['name']}")
+        except Exception as e:
+            logging.error(f"[STORE ERROR] Failed to process {store['name']}: {e}")
 
     logging.info(f"[SUMMARY] Total SKUs processed: {len(all_skus)}")
     logging.info(f"[SUMMARY] Total kits detected: {len(kits)}")
