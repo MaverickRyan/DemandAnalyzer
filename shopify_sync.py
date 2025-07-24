@@ -105,6 +105,15 @@ def update_inventory_level(store, sku, inventory_item_id, available, name=None):
     retry = 0
     while retry < max_retries:
         response = requests.post(endpoint, headers=headers, json=payload)
+
+        # Respect API usage header to avoid hitting 429
+        call_limit = response.headers.get("X-Shopify-Shop-Api-Call-Limit")
+        if call_limit:
+            used, total = map(int, call_limit.split("/"))
+            if used >= total - 5:
+                logging.info(f"[WAIT] API usage {used}/{total}. Sleeping 1s to avoid throttle...")
+                time.sleep(1)
+
         if response.status_code == 200:
             logging.info(f"[OK] Updated {label} to {available} on {store['name']}")
             return
