@@ -23,6 +23,18 @@ logging.basicConfig(
     ]
 )
 
+# Heartbeat log for task health
+heartbeat_log = os.path.join("logs", "sync_runner.log")
+last_heartbeat_time = time.time()
+
+def write_heartbeat(sku, count):
+    global last_heartbeat_time
+    now = time.time()
+    if count % 50 == 0 or (now - last_heartbeat_time >= 30):
+        with open(heartbeat_log, "a", encoding="utf-8") as f:
+            f.write(f"[HEARTBEAT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Processing SKU: {sku}\n")
+        last_heartbeat_time = now
+
 load_dotenv()
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 logging.info(f"[DEBUG] DRY_RUN = {DRY_RUN}")
