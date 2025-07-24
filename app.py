@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Final Clean Version with All Features)
+# 📁 app.py (Final Clean Version with All Features + Kit Checker)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -44,7 +44,6 @@ now = time.time()
 auth_time = st.session_state.get("auth_time", 0)
 session_age = now - auth_time
 
-# Require re-login if timeout reached or not authenticated
 if not st.session_state.get("authenticated", False) or session_age > SESSION_TIMEOUT:
     st.session_state["authenticated"] = False
     password_gate()
@@ -72,8 +71,6 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
-
-inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
 # 🔎 Kit Checker Feature
 st.sidebar.markdown("---")
@@ -174,7 +171,6 @@ with st.expander("➖ Subtract Inventory Manually", expanded=False):
                 else:
                     st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
-
 # Pull orders
 orders = get_orders()
 filtered_orders = []
@@ -198,7 +194,6 @@ if not filtered_orders:
     st.stop()
 
 # Explode orders
-from collections import defaultdict
 def explode_orders(orders, kits):
     exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
     for order in orders:
