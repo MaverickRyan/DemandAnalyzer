@@ -75,6 +75,21 @@ if st.sidebar.button("🔄 Refresh Inventory Now"):
 
 inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
 
+# 🔎 Kit Checker Feature
+st.sidebar.markdown("---")
+st.sidebar.subheader("Check Kit Components")
+kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
+if kit_sku:
+    if kit_sku in kits:
+        st.sidebar.success(f"{kit_sku} is a kit. Components:")
+        comp_data = pd.DataFrame(kits[kit_sku])
+        comp_data.columns = ["Component SKU", "Quantity"]
+        st.sidebar.dataframe(comp_data)
+    else:
+        st.sidebar.info(f"{kit_sku} is not a kit.")
+
+inventory_levels = st.session_state.get("inventory", load_inventory_from_sheets())
+
 # Title
 st.title("📦 Fulfillment & Production Dashboard")
 st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
