@@ -100,11 +100,24 @@ def update_inventory_level(store, sku, inventory_item_id, available, name=None):
         "inventory_item_id": inventory_item_id,
         "available": available
     }
-    response = requests.post(endpoint, headers=headers, json=payload)
-    if response.status_code == 200:
-        logging.info(f"[OK] Updated {label} to {available} on {store['name']}")
-    else:
-        logging.error(f"[ERROR] Failed to update {label} on {store['name']}: {response.text}")
+
+    max_retries = 5
+    retry = 0
+    while retry < max_retries:
+        response = requests.post(endpoint, headers=headers, json=payload)
+        if response.status_code == 200:
+            logging.info(f"[OK] Updated {label} to {available} on {store['name']}")
+            return
+        elif response.status_code == 429:
+            wait_time = 2 ** retry
+            logging.warning(f"[RETRY] Rate limit hit for {label}. Waiting {wait_time}s before retry {retry + 1}/{max_retries}...")
+            time.sleep(wait_time)
+            retry += 1
+        else:
+            logging.error(f"[ERROR] Failed to update {label} on {store['name']}: {response.text}")
+            return
+
+    logging.error(f"[ERROR] Exhausted retries for {label} on {store['name']}")
 
 # --- Main Execution ---
 if __name__ == "__main__":
