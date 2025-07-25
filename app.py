@@ -120,12 +120,11 @@ with st.expander("➕ Add Received Inventory to Stock", expanded=False):
         qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
         submitted = st.form_submit_button("Submit")
         if submitted:
-                old_qty = inventory.get(sku_input, {}).get("stock", 0)
+            old_qty = inventory.get(sku_input, {}).get("stock", 0)
             result = update_inventory_quantity(sku_input, qty_input)
             if result["success"]:
-                        st.success(f"✅ {qty_input} units subtracted from {sku_input}. Updated from {old_qty} → {result['new_qty']}")
-                        st.rerun()
-                    st.rerun()
+                st.success(f"✅ {qty_input} units added to {sku_input}. Updated from {old_qty} → {result['new_qty']}")
+                st.rerun()
             else:
                 st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
@@ -140,6 +139,7 @@ with st.expander("➖ Subtract Inventory Manually", expanded=False):
             result = update_inventory_quantity(sku_input, -qty_input)
             if result["success"]:
                 st.success(f"✅ {qty_input} units subtracted from {sku_input}. Updated from {old_qty} → {result['new_qty']}")
+                st.rerun()
             else:
                 st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
@@ -155,13 +155,13 @@ with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
                 st.error("❌ Incorrect password. Quantity not changed.")
             else:
                 old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
-            diff = qty_input - old_qty
-            result = update_inventory_quantity(sku_input, diff)
-            if result["success"]:
+                diff = qty_input - old_qty
+                result = update_inventory_quantity(sku_input, diff)
+                if result["success"]:
                     st.success(f"[UPDATED] {sku_input}: Overwrote from {old_qty} → {qty_input}.")
                     st.rerun()
-            else:
-                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+                else:
+                    st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
 orders = get_orders()
 filtered_orders = []
