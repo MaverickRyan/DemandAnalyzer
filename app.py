@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Updated with toggleable dashboard views)
+# 📁 app.py (Full version with toggle view, inventory actions, and kit checker)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -17,16 +17,13 @@ from sheet_loader import (
 from streamlit_autorefresh import st_autorefresh
 
 # === Session Settings ===
-SESSION_TIMEOUT = 60 * 60  # 1 hour in seconds
+SESSION_TIMEOUT = 60 * 60
 
 def password_gate():
     st.title("🔒 Secure Dashboard Login")
-    st.markdown("Please enter the access password to continue:")
-
     with st.form("login_form"):
         password = st.text_input("🔑 Password", type="password", placeholder="Enter password...")
         submitted = st.form_submit_button("🔓 Login")
-
         if submitted:
             if password == st.secrets["auth"]["password"]:
                 st.session_state["authenticated"] = True
@@ -40,30 +37,34 @@ def logout():
     st.session_state["auth_time"] = 0
     st.rerun()
 
-# === Handle Timeout ===
 now = time.time()
 auth_time = st.session_state.get("auth_time", 0)
 session_age = now - auth_time
-
 if not st.session_state.get("authenticated", False) or session_age > SESSION_TIMEOUT:
     st.session_state["authenticated"] = False
     password_gate()
     st.stop()
 
-# === Show logout button in sidebar once logged in ===
 with st.sidebar:
     if st.session_state.get("authenticated", False):
         if st.button("🚪 Logout"):
             logout()
 
-# 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
 kits = load_kits_from_sheets()
 inventory = load_inventory_from_sheets()
 all_skus = load_all_inventory_and_kit_skus()
 
-# Sidebar filter
+kit_names = {}
+for kit_sku, components in kits.items():
+    for comp in components:
+        if "kit_name" in comp:
+            kit_names[kit_sku] = comp["kit_name"]
+            break
+    if kit_sku not in kit_names:
+        kit_names[kit_sku] = kit_sku
+
 st.sidebar.header("🗓️ Filter Orders by Date")
 default_start = datetime.now().date() - timedelta(days=14)
 default_end = datetime.now().date()
@@ -71,17 +72,87 @@ start_date = st.sidebar.date_input("Start Date", default_start, key="filter_star
 end_date = st.sidebar.date_input("End Date", default_end, key="filter_end_date")
 
 st.sidebar.markdown("---")
-
-# View Toggle
 view_mode = st.sidebar.selectbox("📊 Select View Mode", ["Stock Components View", "Ordered SKUs View"])
 
 st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("Check Kit Components")
+kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
+if kit_sku:
+    if kit_sku in kits:
+        st.sidebar.success(f"{kit_sku} is a kit. Components:")
+        rows = []
+        for comp in kits[kit_sku]:
+            comp_sku = comp.get("sku", "").strip().upper()
+            qty = comp.get("qty", "")
+            name = inventory.get(comp_sku, {}).get("name", "")
+            rows.append({"Component SKU": comp_sku, "Quantity": qty, "Name": name})
+        st.sidebar.dataframe(pd.DataFrame(rows))
+    else:
+        used_in = []
+        for parent_kit, components in kits.items():
+            for comp in components:
+                if comp.get("sku", "").strip().upper() == kit_sku:
+                    used_in.append({
+                        "Kit SKU": parent_kit,
+                        "Kit Name": kit_names.get(parent_kit, parent_kit),
+                        "Quantity Used": comp.get("qty", "")
+                    })
+        if used_in:
+            st.sidebar.info(f"{kit_sku} is not a kit but is used in the following kits:")
+            st.sidebar.dataframe(pd.DataFrame(used_in))
+        else:
+            st.sidebar.info(f"{kit_sku} is not a kit and not used in any kit.")
+
 inventory_levels = st.session_state.get("inventory", inventory)
 
-# Pull orders
+st.title("📦 Fulfillment & Production Dashboard")
+st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
+
+# Inventory Forms
+with st.expander("➕ Add Received Inventory to Stock", expanded=False):
+    with st.form("inventory_update_form"):
+        sku_input = st.text_input("Enter SKU").strip().upper()
+        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0)
+            result = update_inventory_quantity(sku_input, qty_input)
+            if result["success"]:
+                st.success(f"✅ {qty_input} units added to {sku_input}. Updated from {old_qty} → {result['new_qty']}")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
+with st.expander("➖ Subtract Inventory Manually", expanded=False):
+    with st.form("inventory_subtract_form"):
+        sku_input = st.text_input("Enter SKU to subtract").strip().upper()
+        qty_input = st.number_input("Enter quantity to subtract", step=1, min_value=1)
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0)
+            result = update_inventory_quantity(sku_input, -qty_input)
+            if result["success"]:
+                st.success(f"✅ {qty_input} units subtracted from {sku_input}. Updated from {old_qty} → {result['new_qty']}")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
+with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
+    with st.form("inventory_set_form"):
+        sku_input = st.text_input("Enter SKU to overwrite").strip().upper()
+        qty_input = st.number_input("Set stock quantity", min_value=0.0, step=1.0)
+        submitted = st.form_submit_button("Set Quantity")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
+            diff = qty_input - old_qty
+            result = update_inventory_quantity(sku_input, diff)
+            if result["success"]:
+                st.success(f"[UPDATED] {sku_input}: Overwrote from {old_qty} → {qty_input}.")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
 orders = get_orders()
 filtered_orders = []
 for order in orders:
@@ -95,12 +166,13 @@ for order in orders:
     except:
         continue
 
-st.write("🔎 Filter range:", start_date, "to", end_date)
 if not filtered_orders:
     st.warning("No orders found in the selected date range.")
     st.stop()
 
-# Demand calculator
+st.write("🔎 Filter range:", start_date, "to", end_date)
+
+# Demand calculation
 def get_sku_totals(orders, kits, inventory, separate_virtual=False):
     exploded = defaultdict(lambda: {"total": 0.0, "from_kits": 0.0, "standalone": 0.0})
     for order in orders:
@@ -126,13 +198,8 @@ def get_sku_totals(orders, kits, inventory, separate_virtual=False):
 
 sku_totals = get_sku_totals(filtered_orders, kits, inventory_levels, separate_virtual=(view_mode == "Ordered SKUs View"))
 
-# Determine SKU universe
-if view_mode == "Stock Components View":
-    display_skus = list(inventory_levels.keys())
-else:
-    display_skus = sorted(all_skus)
+display_skus = list(inventory_levels.keys()) if view_mode == "Stock Components View" else sorted(all_skus)
 
-# Build DataFrame
 rows = []
 for sku in display_skus:
     info = inventory_levels.get(sku, {"stock": 0.0, "name": sku})
@@ -154,13 +221,10 @@ for sku in display_skus:
         "Running Inventory": round(max(running, 0), 2)
     })
 
-st.title("📦 Fulfillment & Production Dashboard")
-st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
 df = pd.DataFrame(rows)
 df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
 st.dataframe(df, use_container_width=True)
 
-# Export CSV
 csv_buffer = io.StringIO()
 df.to_csv(csv_buffer, index=False)
 st.download_button("📅 Download CSV", csv_buffer.getvalue(), "sku_fulfillment_summary.csv", "text/csv")
