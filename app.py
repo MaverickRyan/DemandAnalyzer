@@ -152,7 +152,7 @@ with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
             if password_check != st.secrets["auth"]["password"]:
                 st.error("❌ Incorrect password. Quantity not changed.")
             else:
-                old_qty = inventory.get(sku_input, {}).get("stock", 0.0")
+                old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
             diff = qty_input - old_qty
             result = update_inventory_quantity(sku_input, diff)
             if result["success"]:
