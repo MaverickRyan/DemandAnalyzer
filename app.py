@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Final Clean Version with All Features + Kit Checker with Component Names)
+# 📁 app.py (Updated with Set Inventory Level Feature)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -177,6 +177,21 @@ with st.expander("➖ Subtract Inventory Manually", expanded=False):
                     st.success(f"✅ {qty_input} units subtracted from {sku_input}. New total: {result['new_qty']}")
                 else:
                     st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
+# Set Inventory Value Directly
+with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
+    with st.form("inventory_set_form"):
+        sku_input = st.text_input("Enter SKU to overwrite").strip().upper()
+        qty_input = st.number_input("Set stock quantity", min_value=0.0, step=1.0)
+        submitted = st.form_submit_button("Set Quantity")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
+            diff = qty_input - old_qty
+            result = update_inventory_quantity(sku_input, diff)
+            if result["success"]:
+                st.success(f"[UPDATED] {sku_input}: Overwrote from {old_qty} → {qty_input}.")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
 # Pull orders
 orders = get_orders()
