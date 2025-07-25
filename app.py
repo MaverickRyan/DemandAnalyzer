@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Updated with Set Inventory Level Feature)
+# 📁 app.py (Enhanced Kit Checker with Reverse Lookup)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -73,7 +73,7 @@ st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
-# 🔎 Kit Checker Feature
+# 🔎 Kit Checker Feature with reverse lookup
 st.sidebar.markdown("---")
 st.sidebar.subheader("Check Kit Components")
 kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
@@ -90,7 +90,21 @@ if kit_sku:
         comp_data = pd.DataFrame(rows)
         st.sidebar.dataframe(comp_data)
     else:
-        st.sidebar.info(f"{kit_sku} is not a kit.")
+        used_in = []
+        for parent_kit, components in kits.items():
+            for comp in components:
+                if comp.get("sku", "").strip().upper() == kit_sku:
+                    used_in.append({
+                        "Kit SKU": parent_kit,
+                        "Kit Name": inventory.get(parent_kit, {}).get("name", ""),
+                        "Quantity Used": comp.get("qty", "")
+                    })
+        if used_in:
+            st.sidebar.info(f"{kit_sku} is not a kit but is used in the following kits:")
+            df_used = pd.DataFrame(used_in)
+            st.sidebar.dataframe(df_used)
+        else:
+            st.sidebar.info(f"{kit_sku} is not a kit and not used in any kit.")
 
 inventory_levels = st.session_state.get("inventory", inventory)
 
