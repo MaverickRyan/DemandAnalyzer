@@ -110,6 +110,49 @@ if kit_sku:
 
 inventory_levels = st.session_state.get("inventory", inventory)
 
+# 📦 Add Inventory
+with st.expander("➕ Add Received Inventory to Stock", expanded=False):
+    with st.form("inventory_update_form"):
+        sku_input = st.text_input("Enter SKU").strip().upper()
+        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0)
+            result = update_inventory_quantity(sku_input, qty_input)
+            if result["success"]:
+                st.success(f"✅ {qty_input} units added to {sku_input}. Updated from {old_qty} → {result['new_qty']}")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
+# 📦 Subtract Inventory
+with st.expander("➖ Subtract Inventory Manually", expanded=False):
+    with st.form("inventory_subtract_form"):
+        sku_input = st.text_input("Enter SKU to subtract").strip().upper()
+        qty_input = st.number_input("Enter quantity to subtract", step=1, min_value=1)
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0)
+            result = update_inventory_quantity(sku_input, -qty_input)
+            if result["success"]:
+                st.success(f"✅ {qty_input} units subtracted from {sku_input}. Updated from {old_qty} → {result['new_qty']}")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
+# 📦 Set Inventory Value
+with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
+    with st.form("inventory_set_form"):
+        sku_input = st.text_input("Enter SKU to overwrite").strip().upper()
+        qty_input = st.number_input("Set stock quantity", min_value=0.0, step=1.0)
+        submitted = st.form_submit_button("Set Quantity")
+        if submitted:
+            old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
+            diff = qty_input - old_qty
+            result = update_inventory_quantity(sku_input, diff)
+            if result["success"]:
+                st.success(f"[UPDATED] {sku_input}: Overwrote from {old_qty} → {qty_input}.")
+            else:
+                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
+
 orders = get_orders()
 filtered_orders = []
 for order in orders:
