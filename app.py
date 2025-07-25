@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Fixed Product Name fallback for virtual kits)
+# 📁 app.py (Full version with kit checker restored)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -77,6 +77,36 @@ view_mode = st.sidebar.selectbox("📊 Select View Mode", ["Stock Components Vie
 st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
+
+# 🔎 Kit Component Checker (Restored)
+st.sidebar.markdown("---")
+st.sidebar.subheader("Check Kit Components")
+kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
+if kit_sku:
+    if kit_sku in kits:
+        st.sidebar.success(f"{kit_sku} is a kit. Components:")
+        rows = []
+        for comp in kits[kit_sku]:
+            comp_sku = comp.get("sku", "").strip().upper()
+            qty = comp.get("qty", "")
+            name = inventory.get(comp_sku, {}).get("name", "")
+            rows.append({"Component SKU": comp_sku, "Quantity": qty, "Name": name})
+        st.sidebar.dataframe(pd.DataFrame(rows))
+    else:
+        used_in = []
+        for parent_kit, components in kits.items():
+            for comp in components:
+                if comp.get("sku", "").strip().upper() == kit_sku:
+                    used_in.append({
+                        "Kit SKU": parent_kit,
+                        "Kit Name": kit_names.get(parent_kit, parent_kit),
+                        "Quantity Used": comp.get("qty", "")
+                    })
+        if used_in:
+            st.sidebar.info(f"{kit_sku} is not a kit but is used in the following kits:")
+            st.sidebar.dataframe(pd.DataFrame(used_in))
+        else:
+            st.sidebar.info(f"{kit_sku} is not a kit and not used in any kit.")
 
 inventory_levels = st.session_state.get("inventory", inventory)
 
