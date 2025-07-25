@@ -149,7 +149,7 @@ with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
         password_check = st.text_input("Re-enter password", type="password")
         submitted = st.form_submit_button("Set Quantity")
         if submitted:
-            if password_check != st.secrets["auth"]["password"]:
+            if password_check != st.secrets["auth"]["set_inventory_password"]:
                 st.error("❌ Incorrect password. Quantity not changed.")
             else:
                 old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
