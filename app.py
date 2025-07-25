@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Full version with toggle view, inventory actions, and kit checker)
+# 📁 app.py (Fixed Product Name fallback for virtual kits)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -78,80 +78,7 @@ st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Check Kit Components")
-kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
-if kit_sku:
-    if kit_sku in kits:
-        st.sidebar.success(f"{kit_sku} is a kit. Components:")
-        rows = []
-        for comp in kits[kit_sku]:
-            comp_sku = comp.get("sku", "").strip().upper()
-            qty = comp.get("qty", "")
-            name = inventory.get(comp_sku, {}).get("name", "")
-            rows.append({"Component SKU": comp_sku, "Quantity": qty, "Name": name})
-        st.sidebar.dataframe(pd.DataFrame(rows))
-    else:
-        used_in = []
-        for parent_kit, components in kits.items():
-            for comp in components:
-                if comp.get("sku", "").strip().upper() == kit_sku:
-                    used_in.append({
-                        "Kit SKU": parent_kit,
-                        "Kit Name": kit_names.get(parent_kit, parent_kit),
-                        "Quantity Used": comp.get("qty", "")
-                    })
-        if used_in:
-            st.sidebar.info(f"{kit_sku} is not a kit but is used in the following kits:")
-            st.sidebar.dataframe(pd.DataFrame(used_in))
-        else:
-            st.sidebar.info(f"{kit_sku} is not a kit and not used in any kit.")
-
 inventory_levels = st.session_state.get("inventory", inventory)
-
-st.title("📦 Fulfillment & Production Dashboard")
-st.caption(f"🔄 Last Refreshed: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}")
-
-# Inventory Forms
-with st.expander("➕ Add Received Inventory to Stock", expanded=False):
-    with st.form("inventory_update_form"):
-        sku_input = st.text_input("Enter SKU").strip().upper()
-        qty_input = st.number_input("Enter quantity received", step=1, min_value=1)
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            old_qty = inventory.get(sku_input, {}).get("stock", 0)
-            result = update_inventory_quantity(sku_input, qty_input)
-            if result["success"]:
-                st.success(f"✅ {qty_input} units added to {sku_input}. Updated from {old_qty} → {result['new_qty']}")
-            else:
-                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
-
-with st.expander("➖ Subtract Inventory Manually", expanded=False):
-    with st.form("inventory_subtract_form"):
-        sku_input = st.text_input("Enter SKU to subtract").strip().upper()
-        qty_input = st.number_input("Enter quantity to subtract", step=1, min_value=1)
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            old_qty = inventory.get(sku_input, {}).get("stock", 0)
-            result = update_inventory_quantity(sku_input, -qty_input)
-            if result["success"]:
-                st.success(f"✅ {qty_input} units subtracted from {sku_input}. Updated from {old_qty} → {result['new_qty']}")
-            else:
-                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
-
-with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
-    with st.form("inventory_set_form"):
-        sku_input = st.text_input("Enter SKU to overwrite").strip().upper()
-        qty_input = st.number_input("Set stock quantity", min_value=0.0, step=1.0)
-        submitted = st.form_submit_button("Set Quantity")
-        if submitted:
-            old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
-            diff = qty_input - old_qty
-            result = update_inventory_quantity(sku_input, diff)
-            if result["success"]:
-                st.success(f"[UPDATED] {sku_input}: Overwrote from {old_qty} → {qty_input}.")
-            else:
-                st.error(f"❌ SKU '{sku_input}' not found in the inventory sheet.")
 
 orders = get_orders()
 filtered_orders = []
@@ -203,6 +130,7 @@ display_skus = list(inventory_levels.keys()) if view_mode == "Stock Components V
 rows = []
 for sku in display_skus:
     info = inventory_levels.get(sku, {"stock": 0.0, "name": sku})
+    product_name = info.get("name") or kit_names.get(sku, sku)
     total = sku_totals.get(sku, {}).get("total", 0.0)
     from_kits = sku_totals.get(sku, {}).get("from_kits", 0.0)
     standalone = sku_totals.get(sku, {}).get("standalone", 0.0)
@@ -212,7 +140,7 @@ for sku in display_skus:
     rows.append({
         "Is Kit": "✅" if sku in kits else "",
         "SKU": sku,
-        "Product Name": info.get("name", sku),
+        "Product Name": product_name,
         "Total Quantity Needed": round(total, 2),
         "From Kits": round(from_kits, 2),
         "Standalone Orders": round(standalone, 2),
