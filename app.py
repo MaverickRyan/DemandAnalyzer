@@ -78,6 +78,7 @@ st.sidebar.markdown("---")
 view_mode = st.sidebar.selectbox("📊 Select View Mode", ["Stock Components View", "Ordered SKUs View"])
 
 st.sidebar.subheader("Inventory Controls")
+inventory = load_inventory_from_sheets()
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
