@@ -75,7 +75,12 @@ start_date = st.sidebar.date_input("Start Date", default_start, key="filter_star
 end_date = st.sidebar.date_input("End Date", default_end, key="filter_end_date")
 
 st.sidebar.markdown("---")
-view_mode = st.sidebar.selectbox("📊 Select View Mode", ["Stock Components View", "Ordered SKUs View"])
+view_mode = st.sidebar.selectbox("📊 Select View Mode", ["Stock Components View", "Ordered SKUs View"], key="view_mode_selector")
+if "_last_view_mode" not in st.session_state:
+    st.session_state["_last_view_mode"] = view_mode
+elif view_mode != st.session_state["_last_view_mode"]:
+    st.session_state["_last_view_mode"] = view_mode
+    st.rerun()
 
 st.sidebar.subheader("Inventory Controls")
 
