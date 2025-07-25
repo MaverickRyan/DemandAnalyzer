@@ -109,6 +109,8 @@ if kit_sku:
         else:
             st.sidebar.info(f"{kit_sku} is not a kit and not used in any kit.")
 
+st.markdown("# 🧾 SKU Fulfillment Summary")
+
 inventory_levels = st.session_state.get("inventory", inventory)
 
 # 📦 Add Inventory
@@ -229,7 +231,7 @@ for sku in display_skus:
 
 df = pd.DataFrame(rows)
 df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
-st.markdown("## 🧾 SKU Fulfillment Summary")
+
 st.dataframe(df, use_container_width=True)
 
 csv_buffer = io.StringIO()
