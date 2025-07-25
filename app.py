@@ -78,8 +78,6 @@ st.sidebar.markdown("---")
 view_mode = st.sidebar.selectbox("📊 Select View Mode", ["Stock Components View", "Ordered SKUs View"])
 
 st.sidebar.subheader("Inventory Controls")
-# (Sidebar refresh already handled above, no need to duplicate)  # This is the correct one to keep:
-    st.session_state["inventory"] = load_inventory_from_sheets()
 
 # 🔎 Kit Component Checker (Restored)
 st.sidebar.markdown("---")
