@@ -1,5 +1,5 @@
 # -------------------------
-# 📁 app.py (Enhanced Kit Checker with Reverse Lookup)
+# 📁 app.py (Enhanced Kit Checker with Kit Names from Kits Sheet)
 # -------------------------
 import streamlit as st
 import pandas as pd
@@ -61,6 +61,18 @@ st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 kits = load_kits_from_sheets()
 inventory = load_inventory_from_sheets()
 
+# Extract kit names from kits list
+kit_names = {}
+for kit_sku, components in kits.items():
+    if components and isinstance(components[0], dict):
+        first_component = components[0]
+        if 'kit_name' in first_component:
+            kit_names[kit_sku] = first_component['kit_name']
+        else:
+            kit_names[kit_sku] = kit_sku
+    else:
+        kit_names[kit_sku] = kit_sku
+
 # Sidebar filter
 st.sidebar.header("🗓️ Filter Orders by Date")
 default_start = datetime.now().date() - timedelta(days=14)
@@ -73,7 +85,7 @@ st.sidebar.subheader("Inventory Controls")
 if st.sidebar.button("🔄 Refresh Inventory Now"):
     st.session_state["inventory"] = load_inventory_from_sheets()
 
-# 🔎 Kit Checker Feature with reverse lookup
+# 🔎 Kit Checker Feature with reverse lookup and kit name fallback
 st.sidebar.markdown("---")
 st.sidebar.subheader("Check Kit Components")
 kit_sku = st.sidebar.text_input("Enter SKU to check components").strip().upper()
@@ -96,7 +108,7 @@ if kit_sku:
                 if comp.get("sku", "").strip().upper() == kit_sku:
                     used_in.append({
                         "Kit SKU": parent_kit,
-                        "Kit Name": inventory.get(parent_kit, {}).get("name", ""),
+                        "Kit Name": kit_names.get(parent_kit, parent_kit),
                         "Quantity Used": comp.get("qty", "")
                     })
         if used_in:
