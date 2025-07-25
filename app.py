@@ -49,6 +49,9 @@ with st.sidebar:
     if st.session_state.get("authenticated", False):
         if st.button("🚪 Logout"):
             logout()
+        # 🔄 Manual Refresh Button (moved under logout)
+        if st.button("🔄 Refresh Inventory Now"):
+            st.session_state["inventory"] = load_inventory_from_sheets()
 
 st_autorefresh(interval=5 * 60 * 1000, key="inventory_autorefresh")
 
@@ -143,9 +146,13 @@ with st.expander("✏️ Set Inventory Quantity Manually", expanded=False):
     with st.form("inventory_set_form"):
         sku_input = st.text_input("Enter SKU to overwrite").strip().upper()
         qty_input = st.number_input("Set stock quantity", min_value=0.0, step=1.0)
+        password_check = st.text_input("Re-enter password", type="password")
         submitted = st.form_submit_button("Set Quantity")
         if submitted:
-            old_qty = inventory.get(sku_input, {}).get("stock", 0.0)
+            if password_check != st.secrets["auth"]["password"]:
+                st.error("❌ Incorrect password. Quantity not changed.")
+            else:
+                old_qty = inventory.get(sku_input, {}).get("stock", 0.0")
             diff = qty_input - old_qty
             result = update_inventory_quantity(sku_input, diff)
             if result["success"]:
@@ -224,6 +231,7 @@ for sku in display_skus:
 
 df = pd.DataFrame(rows)
 df = df.sort_values("Total Quantity Needed", ascending=False).reset_index(drop=True)
+st.markdown("## 🧾 SKU Fulfillment Summary")
 st.dataframe(df, use_container_width=True)
 
 csv_buffer = io.StringIO()
